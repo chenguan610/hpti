@@ -6,34 +6,27 @@
 const fs = require('fs');
 const path = require('path');
 
-const DATA_DIR = '/tmp/data';
+const DATA_DIR = '/tmp/hpti-data';
 const DATA_FILE = path.join(DATA_DIR, 'store.json');
 
 // In-memory cache (persists across warm invocations)
 let _cache = null;
 
 // ==================== Data Layer ====================
-function initData() {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    if (!fs.existsSync(DATA_FILE)) {
-        const init = { password: 'admin', config: null, results: [] };
-        fs.writeFileSync(DATA_FILE, JSON.stringify(init));
-        _cache = init;
-    }
-}
-
-function readData() {
+function getData() {
     if (_cache) return _cache;
     try {
-        _cache = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
-        return _cache;
-    } catch (e) {
-        _cache = { password: 'admin', config: null, results: [] };
-        return _cache;
-    }
+        if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+        if (fs.existsSync(DATA_FILE)) {
+            _cache = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+            return _cache;
+        }
+    } catch (e) { /* fall through to default */ }
+    _cache = { password: 'admin', config: null, results: [] };
+    return _cache;
 }
 
-function writeData(data) {
+function saveData(data) {
     _cache = data;
     try {
         if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -45,12 +38,17 @@ function writeData(data) {
 
 // ==================== Helpers ====================
 function sendJSON(res, status, data) {
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Admin-Password');
-    res.statusCode = status;
-    res.end(JSON.stringify(data));
+    try {
+        const body = JSON.stringify(data);
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Admin-Password');
+        res.statusCode = status;
+        res.end(body);
+    } catch (e) {
+        // response already sent or connection closed
+    }
 }
 
 function readBody(req) {
@@ -64,6 +62,7 @@ function readBody(req) {
             try { resolve(JSON.parse(body)); }
             catch (e) { resolve({}); }
         });
+        req.on('error', () => resolve({}));
     });
 }
 
@@ -74,7 +73,7 @@ function checkAuth(req, data) {
 
 // ==================== API Handlers ====================
 async function handleApi(req, res, pathname, method) {
-    const data = readData();
+    const data = getData();
 
     // ---- POST /api/submit (public) ----
     if (method === 'POST' && pathname === '/api/submit') {
@@ -97,7 +96,7 @@ async function handleApi(req, res, pathname, method) {
         if (data.results.length > 50000) {
             data.results = data.results.slice(-50000);
         }
-        writeData(data);
+        saveData(data);
         sendJSON(res, 200, { success: true, id: result.id });
         return;
     }
@@ -117,7 +116,7 @@ async function handleApi(req, res, pathname, method) {
             personalities: body.personalities || [],
             rarityInfo: body.rarityInfo || {}
         };
-        writeData(data);
+        saveData(data);
         sendJSON(res, 200, { success: true });
         return;
     }
@@ -136,19 +135,8 @@ async function handleApi(req, res, pathname, method) {
     // ---- GET /api/results (auth) ----
     if (method === 'GET' && pathname === '/api/results') {
         if (!checkAuth(req, data)) { sendJSON(res, 401, { error: '未授权' }); return; }
-        const url = new URL(req.url, 'http://localhost');
-        const page = parseInt(url.searchParams.get('page')) || 1;
-        const perPage = parseInt(url.searchParams.get('perPage')) || 0;
         const results = data.results.slice().reverse();
-        if (perPage > 0) {
-            const start = (page - 1) * perPage;
-            sendJSON(res, 200, {
-                results: results.slice(start, start + perPage),
-                total: results.length, page, perPage,
-            });
-        } else {
-            sendJSON(res, 200, { results, total: results.length });
-        }
+        sendJSON(res, 200, { results, total: results.length });
         return;
     }
 
@@ -164,7 +152,7 @@ async function handleApi(req, res, pathname, method) {
             recent: results.slice(-20).reverse(),
         };
         results.forEach(r => {
-            if (stats.byRarity[r.rarity] !== undefined) stats.byRarity[r.rarity]++;
+            if (r.rarity && stats.byRarity[r.rarity] !== undefined) stats.byRarity[r.rarity]++;
             const pKey = (r.personalityEmoji || '') + ' ' + r.personalityCode + ' ' + r.personalityName;
             stats.byPersonality[pKey] = (stats.byPersonality[pKey] || 0) + 1;
             stats.byCode[r.personalityCode] = (stats.byCode[r.personalityCode] || 0) + 1;
@@ -172,7 +160,7 @@ async function handleApi(req, res, pathname, method) {
         const topP = Object.entries(stats.byPersonality).sort((a, b) => b[1] - a[1])[0];
         if (topP) stats.topPersonality = { name: topP[0].trim(), count: topP[1] };
         const today = new Date().toISOString().slice(0, 10);
-        stats.todayCount = results.filter(r => r.timestamp.startsWith(today)).length;
+        stats.todayCount = results.filter(r => r.timestamp && r.timestamp.startsWith(today)).length;
         stats.trend = [];
         for (let i = 6; i >= 0; i--) {
             const d = new Date();
@@ -180,7 +168,7 @@ async function handleApi(req, res, pathname, method) {
             const ds = d.toISOString().slice(0, 10);
             stats.trend.push({
                 date: ds,
-                count: results.filter(r => r.timestamp.startsWith(ds)).length
+                count: results.filter(r => r.timestamp && r.timestamp.startsWith(ds)).length
             });
         }
         stats.avgMatch = results.length > 0
@@ -194,7 +182,7 @@ async function handleApi(req, res, pathname, method) {
     if (method === 'DELETE' && pathname === '/api/results') {
         if (!checkAuth(req, data)) { sendJSON(res, 401, { error: '未授权' }); return; }
         data.results = [];
-        writeData(data);
+        saveData(data);
         sendJSON(res, 200, { success: true });
         return;
     }
@@ -205,7 +193,7 @@ async function handleApi(req, res, pathname, method) {
         const body = await readBody(req);
         if (!body.newPassword) { sendJSON(res, 400, { error: '请输入新密码' }); return; }
         data.password = body.newPassword;
-        writeData(data);
+        saveData(data);
         sendJSON(res, 200, { success: true });
         return;
     }
@@ -224,7 +212,7 @@ async function handleApi(req, res, pathname, method) {
         if (body.password) data.password = body.password;
         if (body.config) data.config = body.config;
         if (body.results) data.results = body.results;
-        writeData(data);
+        saveData(data);
         sendJSON(res, 200, { success: true });
         return;
     }
@@ -240,9 +228,6 @@ async function handleApi(req, res, pathname, method) {
 }
 
 // ==================== Vercel Entry Point ====================
-// Initialize on first invocation (cold start)
-initData();
-
 module.exports = async function handler(req, res) {
     // CORS preflight
     if (req.method === 'OPTIONS') {
@@ -250,9 +235,16 @@ module.exports = async function handler(req, res) {
         return;
     }
 
-    // Reconstruct path from Vercel catch-all params
-    const segments = req.query.path || [];
-    const pathname = '/api/' + segments.join('/');
+    // Parse pathname from req.url (works in all Vercel runtimes)
+    let pathname = '/api/';
+    try {
+        const parsed = new URL(req.url, 'http://localhost');
+        pathname = parsed.pathname;
+    } catch (e) {
+        // fallback: extract path manually
+        const rawUrl = req.url || '';
+        pathname = rawUrl.split('?')[0];
+    }
 
     try {
         await handleApi(req, res, pathname, req.method);

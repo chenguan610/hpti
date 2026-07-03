@@ -1,14 +1,15 @@
 /**
  * HPTI Backend Server
- * Zero-dependency Node.js server (built-in modules only)
- * Serves static files + REST API for test results & config management
+ * Zero-dependency Node.js server
+ * Works both standalone (local) and on Vercel (serverless)
  */
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
+const IS_VERCEL = !!process.env.VERCEL;
 const PORT = process.env.PORT || 3000;
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = IS_VERCEL ? '/tmp/hpti-data' : path.join(__dirname, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'store.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
@@ -24,27 +25,52 @@ const MIME = {
 };
 
 // ==================== Data Layer ====================
+let _cache = null;
+
 function initData() {
+    if (IS_VERCEL) {
+        // On Vercel, use in-memory cache + /tmp
+        if (_cache) return;
+        try {
+            if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+            if (fs.existsSync(DATA_FILE)) {
+                _cache = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+                return;
+            }
+        } catch (e) { /* fall through */ }
+        _cache = { password: 'admin', config: null, results: [] };
+        return;
+    }
+    // Local mode
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
     if (!fs.existsSync(DATA_FILE)) {
         fs.writeFileSync(DATA_FILE, JSON.stringify({
-            password: 'admin',
-            config: null,
-            results: []
+            password: 'admin', config: null, results: []
         }, null, 2));
     }
 }
 
 function readData() {
+    if (IS_VERCEL && _cache) return _cache;
     try {
-        return JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+        const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+        if (IS_VERCEL) _cache = data;
+        return data;
     } catch (e) {
         return { password: 'admin', config: null, results: [] };
     }
 }
 
 function writeData(data) {
-    // Atomic write: write to temp then rename
+    if (IS_VERCEL) {
+        _cache = data;
+        try {
+            if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+            fs.writeFileSync(DATA_FILE, JSON.stringify(data));
+        } catch (e) { /* cache-only on Vercel if /tmp fails */ }
+        return;
+    }
+    // Local: atomic write
     const tmp = DATA_FILE + '.tmp';
     fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
     fs.renameSync(tmp, DATA_FILE);
@@ -71,6 +97,7 @@ function readBody(req) {
             try { resolve(JSON.parse(body)); }
             catch (e) { resolve({}); }
         });
+        req.on('error', () => resolve({}));
     });
 }
 
@@ -94,7 +121,6 @@ function serveStatic(req, res, pathname) {
     const ext = path.extname(filePath);
     fs.readFile(filePath, (err, data) => {
         if (err) {
-            // Fallback to index.html for SPA-like behavior
             if (ext === '' || ext === '.html') {
                 fs.readFile(path.join(PUBLIC_DIR, 'index.html'), (e2, d2) => {
                     if (e2) { res.writeHead(404); res.end('Not Found'); }
@@ -115,10 +141,8 @@ function serveStatic(req, res, pathname) {
 async function handleApi(req, res, pathname, method) {
     const data = readData();
 
-    // ---- POST /api/submit (public) ----
     if (method === 'POST' && pathname === '/api/submit') {
         const body = await readBody(req);
-        // Basic validation
         if (!body.personalityCode || !body.personalityName) {
             sendJSON(res, 400, { error: '缺少必填字段' });
             return;
@@ -134,22 +158,17 @@ async function handleApi(req, res, pathname, method) {
             timestamp: new Date().toISOString(),
         };
         data.results.push(result);
-        // Keep max 50000 results
-        if (data.results.length > 50000) {
-            data.results = data.results.slice(-50000);
-        }
+        if (data.results.length > 50000) data.results = data.results.slice(-50000);
         writeData(data);
         sendJSON(res, 200, { success: true, id: result.id });
         return;
     }
 
-    // ---- GET /api/config (public) ----
     if (method === 'GET' && pathname === '/api/config') {
         sendJSON(res, 200, { config: data.config });
         return;
     }
 
-    // ---- PUT /api/config (auth) ----
     if (method === 'PUT' && pathname === '/api/config') {
         if (!checkAuth(req, data)) { sendJSON(res, 401, { error: '未授权' }); return; }
         const body = await readBody(req);
@@ -163,7 +182,6 @@ async function handleApi(req, res, pathname, method) {
         return;
     }
 
-    // ---- POST /api/login (public) ----
     if (method === 'POST' && pathname === '/api/login') {
         const body = await readBody(req);
         if (body.password === data.password) {
@@ -174,29 +192,13 @@ async function handleApi(req, res, pathname, method) {
         return;
     }
 
-    // ---- GET /api/results (auth) ----
     if (method === 'GET' && pathname === '/api/results') {
         if (!checkAuth(req, data)) { sendJSON(res, 401, { error: '未授权' }); return; }
-        // Support pagination via query params
-        const url = new URL(req.url, `http://${req.headers.host}`);
-        const page = parseInt(url.searchParams.get('page')) || 1;
-        const perPage = parseInt(url.searchParams.get('perPage')) || 0; // 0 = all
-        const results = data.results.slice().reverse(); // newest first
-        if (perPage > 0) {
-            const start = (page - 1) * perPage;
-            sendJSON(res, 200, {
-                results: results.slice(start, start + perPage),
-                total: results.length,
-                page,
-                perPage,
-            });
-        } else {
-            sendJSON(res, 200, { results, total: results.length });
-        }
+        const results = data.results.slice().reverse();
+        sendJSON(res, 200, { results, total: results.length });
         return;
     }
 
-    // ---- GET /api/stats (auth) ----
     if (method === 'GET' && pathname === '/api/stats') {
         if (!checkAuth(req, data)) { sendJSON(res, 401, { error: '未授权' }); return; }
         const results = data.results;
@@ -208,29 +210,22 @@ async function handleApi(req, res, pathname, method) {
             recent: results.slice(-20).reverse(),
         };
         results.forEach(r => {
-            if (stats.byRarity[r.rarity] !== undefined) stats.byRarity[r.rarity]++;
+            if (r.rarity && stats.byRarity[r.rarity] !== undefined) stats.byRarity[r.rarity]++;
             const pKey = (r.personalityEmoji || '') + ' ' + r.personalityCode + ' ' + r.personalityName;
             stats.byPersonality[pKey] = (stats.byPersonality[pKey] || 0) + 1;
             stats.byCode[r.personalityCode] = (stats.byCode[r.personalityCode] || 0) + 1;
         });
-        // Top personality
         const topP = Object.entries(stats.byPersonality).sort((a, b) => b[1] - a[1])[0];
         if (topP) stats.topPersonality = { name: topP[0].trim(), count: topP[1] };
-        // Today's count
         const today = new Date().toISOString().slice(0, 10);
-        stats.todayCount = results.filter(r => r.timestamp.startsWith(today)).length;
-        // Last 7 days trend
+        stats.todayCount = results.filter(r => r.timestamp && r.timestamp.startsWith(today)).length;
         stats.trend = [];
         for (let i = 6; i >= 0; i--) {
             const d = new Date();
             d.setDate(d.getDate() - i);
             const ds = d.toISOString().slice(0, 10);
-            stats.trend.push({
-                date: ds,
-                count: results.filter(r => r.timestamp.startsWith(ds)).length
-            });
+            stats.trend.push({ date: ds, count: results.filter(r => r.timestamp && r.timestamp.startsWith(ds)).length });
         }
-        // Match percent distribution
         stats.avgMatch = results.length > 0
             ? Math.round(results.reduce((s, r) => s + (r.matchPercent || 0), 0) / results.length)
             : 0;
@@ -238,7 +233,6 @@ async function handleApi(req, res, pathname, method) {
         return;
     }
 
-    // ---- DELETE /api/results (auth) ----
     if (method === 'DELETE' && pathname === '/api/results') {
         if (!checkAuth(req, data)) { sendJSON(res, 401, { error: '未授权' }); return; }
         data.results = [];
@@ -247,7 +241,6 @@ async function handleApi(req, res, pathname, method) {
         return;
     }
 
-    // ---- POST /api/password (auth) ----
     if (method === 'POST' && pathname === '/api/password') {
         if (!checkAuth(req, data)) { sendJSON(res, 401, { error: '未授权' }); return; }
         const body = await readBody(req);
@@ -258,14 +251,12 @@ async function handleApi(req, res, pathname, method) {
         return;
     }
 
-    // ---- GET /api/export (auth) ----
     if (method === 'GET' && pathname === '/api/export') {
         if (!checkAuth(req, data)) { sendJSON(res, 401, { error: '未授权' }); return; }
         sendJSON(res, 200, data);
         return;
     }
 
-    // ---- POST /api/import (auth) ----
     if (method === 'POST' && pathname === '/api/import') {
         if (!checkAuth(req, data)) { sendJSON(res, 401, { error: '未授权' }); return; }
         const body = await readBody(req);
@@ -277,14 +268,11 @@ async function handleApi(req, res, pathname, method) {
         return;
     }
 
-    // ---- GET /api/health (public, for Render health check) ----
     if (method === 'GET' && pathname === '/api/health') {
-        const stats = { total: data.results.length, uptime: process.uptime() };
-        sendJSON(res, 200, { status: 'ok', ...stats });
+        sendJSON(res, 200, { status: 'ok', total: data.results.length });
         return;
     }
 
-    // ---- 404 ----
     sendJSON(res, 404, { error: 'Not Found' });
 }
 
@@ -294,13 +282,11 @@ const server = http.createServer(async (req, res) => {
     const pathname = parsedUrl.pathname;
     const method = req.method;
 
-    // CORS preflight
     if (method === 'OPTIONS') {
         sendJSON(res, 204, {});
         return;
     }
 
-    // API routes
     if (pathname.startsWith('/api/')) {
         try {
             await handleApi(req, res, pathname, method);
@@ -311,19 +297,26 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // Static files
     serveStatic(req, res, pathname);
 });
 
+// Initialize data on cold start
 initData();
-server.listen(PORT, '0.0.0.0', () => {
-    console.log('');
-    console.log('  ===================================');
-    console.log('   HPTI Backend Server');
-    console.log('  ===================================');
-    console.log('  Test page:  http://localhost:' + PORT + '/');
-    console.log('  Admin page: http://localhost:' + PORT + '/admin.html');
-    console.log('  API base:   http://localhost:' + PORT + '/api');
-    console.log('  ===================================');
-    console.log('');
-});
+
+// Export for Vercel serverless
+module.exports = server;
+
+// Only listen when running locally (not on Vercel)
+if (!IS_VERCEL) {
+    server.listen(PORT, '0.0.0.0', () => {
+        console.log('');
+        console.log('  ===================================');
+        console.log('   HPTI Backend Server');
+        console.log('  ===================================');
+        console.log('  Test page:  http://localhost:' + PORT + '/');
+        console.log('  Admin page: http://localhost:' + PORT + '/admin.html');
+        console.log('  API base:   http://localhost:' + PORT + '/api');
+        console.log('  ===================================');
+        console.log('');
+    });
+}

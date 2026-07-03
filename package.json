@@ -1,15 +1,9 @@
 {
-    "name": "hpti-server",
+    "name": "hpti",
     "version": "1.0.0",
-    "description": "HPTI 人格测试后端服务",
-    "main": "server.js",
-    "scripts": {
-        "start": "node server.js"
-    },
+    "description": "HPTI Personality Test",
+    "private": true,
     "engines": {
-        "node": ">=14.0.0"
-    },
-    "keywords": [],
-    "author": "",
-    "license": "ISC"
+        "node": ">=18.0.0"
+    }
 }
