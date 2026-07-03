@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HPTI 后台管理系统</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #1e1a29;
+            background-image: radial-gradient(circle at 20% 10%, #332b40 0%, transparent 35%),
+                radial-gradient(circle at 80% 90%, #2d2740 0%, transparent 40%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+            color: #e8e0f0;
+            padding: 16px;
+        }
+        /* ===== Login ===== */
+        .login-wrap {
+            display: flex; align-items: center; justify-content: center;
+            min-height: 90vh;
+        }
+        .login-box {
+            background: rgba(30,25,40,0.85);
+            backdrop-filter: blur(16px);
+            border-radius: 28px;
+            padding: 40px 32px;
+            max-width: 380px; width: 100%;
+            text-align: center;
+            border: 1px solid rgba(255,210,130,0.2);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+        .login-box .emoji { font-size: 48px; margin-bottom: 8px; }
+        .login-box h1 {
+            font-size: 22px; font-weight: 700; margin-bottom: 4px;
+            background: linear-gradient(135deg, #f9d390, #e6a4b4);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        }
+        .login-box .sub { color: #9b8eaa; font-size: 13px; margin-bottom: 24px; }
+        .login-box input {
+            width: 100%; padding: 12px 16px; border-radius: 14px;
+            background: rgba(60,45,75,0.8); border: 1.5px solid rgba(190,150,130,0.5);
+            color: #e3d7f0; font-size: 15px; outline: none; margin-bottom: 12px;
+            transition: border-color .2s;
+        }
+        .login-box input:focus { border-color: #dba05a; }
+        .login-box .btn { width: 100%; }
+
+        /* ===== Buttons ===== */
+        .btn {
+            padding: 10px 24px; border-radius: 24px; font-weight: 600; font-size: 14px;
+            cursor: pointer; border: none; transition: all .2s; letter-spacing: .5px;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .btn-primary { background: #dba05a; color: #1e1826; box-shadow: 0 4px 16px rgba(230,160,70,0.4); }
+        .btn-primary:hover { background: #e6b46c; transform: translateY(-1px); }
+        .btn-danger { background: #c75c5c; color: #fff; }
+        .btn-danger:hover { background: #d97070; }
+        .btn-outline { background: transparent; border: 1.5px solid #6e5c78; color: #ddd; }
+        .btn-outline:hover { background: rgba(255,255,255,0.06); border-color: #c9b8d8; }
+        .btn-sm { padding: 6px 14px; font-size: 12px; border-radius: 18px; }
+        .btn:disabled { opacity: .4; pointer-events: none; }
+
+        /* ===== Admin Main ===== */
+        .admin-container { max-width: 1100px; margin: 0 auto; }
+        .admin-header {
+            display: flex; align-items: center; justify-content: space-between;
+            flex-wrap: wrap; gap: 12px; margin-bottom: 20px;
+        }
+        .admin-title {
+            display: flex; align-items: center; gap: 10px;
+        }
+        .admin-title .emoji { font-size: 32px; filter: drop-shadow(0 0 8px #daa06a); }
+        .admin-title h1 {
+            font-size: 22px; font-weight: 700;
+            background: linear-gradient(135deg, #f9d390, #e6a4b4);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        }
+        .admin-title .ver { font-size: 11px; color: #6e5c78; }
+
+        .tab-nav {
+            display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 20px;
+            background: rgba(45,35,55,0.6); border-radius: 16px; padding: 4px;
+            border: 1px solid rgba(215,185,140,0.15);
+        }
+        .tab-btn {
+            padding: 10px 18px; border-radius: 12px; font-size: 14px; font-weight: 600;
+            cursor: pointer; border: none; background: transparent; color: #9b8eaa;
+            transition: all .2s; white-space: nowrap;
+        }
+        .tab-btn:hover { color: #ddd; background: rgba(255,255,255,0.04); }
+        .tab-btn.active {
+            background: rgba(219,160,90,0.25); color: #f9d390;
+            box-shadow: 0 0 12px rgba(230,170,100,0.2);
+        }
+        .tab-content { display: none; animation: fadeUp .35s ease; }
+        @keyframes fadeUp { from{opacity:0;transform:translateY(12px);} to{opacity:1;transform:translateY(0);} }
+
+        /* ===== Cards ===== */
+        .card {
+            background: rgba(45,35,55,0.7); border-radius: 18px; padding: 20px;
+            border: 1px solid rgba(215,185,140,0.2); margin-bottom: 16px;
+        }
+        .card-title {
+            font-size: 16px; font-weight: 700; color: #f1e5ff; margin-bottom: 14px;
+            display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+        }
+
+        /* ===== Dashboard Stats ===== */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(200px,1fr)); gap: 14px; margin-bottom: 20px; }
+        .stat-card {
+            background: rgba(45,35,55,0.7); border-radius: 16px; padding: 20px;
+            border: 1px solid rgba(215,185,140,0.2); text-align: center;
+        }
+        .stat-card .stat-icon { font-size: 32px; margin-bottom: 6px; }
+        .stat-card .stat-num {
+            font-size: 36px; font-weight: 800;
+            background: linear-gradient(135deg, #f9d390, #e6a4b4);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        }
+        .stat-card .stat-label { font-size: 13px; color: #9b8eaa; margin-top: 4px; }
+
+        .dim-stats { display: flex; flex-wrap: wrap; gap: 8px; }
+        .dim-chip {
+            background: rgba(219,160,90,0.15); border: 1px solid rgba(219,160,90,0.3);
+            border-radius: 20px; padding: 6px 16px; font-size: 13px; color: #f5d7b0;
+        }
+        .dim-chip b { color: #f9d390; }
+
+        .rarity-stats { display: flex; flex-wrap: wrap; gap: 8px; }
+        .rarity-chip {
+            border-radius: 20px; padding: 6px 16px; font-size: 13px; font-weight: 600;
+        }
+        .rarity-chip.common { background: rgba(176,160,192,0.2); color: #b0a0c0; border:1px solid rgba(176,160,192,0.4); }
+        .rarity-chip.rare { background: rgba(126,200,160,0.2); color: #7ec8a0; border:1px solid rgba(126,200,160,0.4); }
+        .rarity-chip.epic { background: rgba(201,123,191,0.2); color: #c97bbf; border:1px solid rgba(201,123,191,0.4); }
+        .rarity-chip.legendary { background: rgba(255,170,0,0.2); color: #ffaa00; border:1px solid rgba(255,170,0,0.4); }
+
+        /* ===== Table ===== */
+        .data-table { width: 100%; border-collapse: collapse; }
+        .data-table th {
+            text-align: left; padding: 10px 12px; font-size: 12px; color: #9b8eaa;
+            border-bottom: 1px solid rgba(215,185,140,0.2); text-transform: uppercase; letter-spacing: 1px;
+        }
+        .data-table td {
+            padding: 12px; font-size: 13px; border-bottom: 1px solid rgba(60,45,75,0.5);
+            color: #ddd; vertical-align: top;
+        }
+        .data-table tr:hover td { background: rgba(255,255,255,0.03); }
+        .data-table .code-cell { font-weight: 700; color: #f9d390; letter-spacing: 1px; font-family: monospace; }
+        .data-table .name-cell { font-weight: 600; color: #f1e5ff; }
+
+        .table-wrap { overflow-x: auto; border-radius: 14px; }
+
+        /* ===== Badges ===== */
+        .badge {
+            display: inline-block; padding: 3px 10px; border-radius: 12px;
+            font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+        }
+        .badge-dim-sex { background: rgba(230,160,180,0.2); color: #e6a4b4; border:1px solid rgba(230,160,180,0.3); }
+        .badge-dim-social { background: rgba(126,200,160,0.2); color: #7ec8a0; border:1px solid rgba(126,200,160,0.3); }
+        .badge-dim-emotion { background: rgba(126,160,230,0.2); color: #7ea0e6; border:1px solid rgba(126,160,230,0.3); }
+        .badge-dim-action { background: rgba(230,200,100,0.2); color: #e6c864; border:1px solid rgba(230,200,100,0.3); }
+        .badge-dim-think { background: rgba(180,140,230,0.2); color: #b48ce6; border:1px solid rgba(180,140,230,0.3); }
+        .badge-dim-adventure { background: rgba(230,130,100,0.2); color: #e68264; border:1px solid rgba(230,130,100,0.3); }
+
+        .badge-common { background: rgba(176,160,192,0.2); color: #b0a0c0; }
+        .badge-rare { background: rgba(126,200,160,0.2); color: #7ec8a0; }
+        .badge-epic { background: rgba(201,123,191,0.2); color: #c97bbf; }
+        .badge-legendary { background: rgba(255,170,0,0.2); color: #ffaa00; }
+
+        /* ===== Filter Bar ===== */
+        .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+        .filter-bar select, .filter-bar input {
+            padding: 8px 14px; border-radius: 12px; background: rgba(60,45,75,0.8);
+            border: 1.5px solid rgba(190,150,130,0.4); color: #ddd; font-size: 13px; outline: none;
+        }
+        .filter-bar select:focus, .filter-bar input:focus { border-color: #dba05a; }
+        .filter-bar .spacer { flex: 1; }
+
+        /* ===== Modal ===== */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+            display: none; align-items: flex-start; justify-content: center;
+            z-index: 1000; padding: 20px; overflow-y: auto;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal-box {
+            background: rgba(30,25,40,0.95); border-radius: 24px;
+            padding: 28px 24px; max-width: 600px; width: 100%;
+            border: 1px solid rgba(255,210,130,0.25);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+            animation: fadeUp .3s ease; margin: auto;
+        }
+        .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+        .modal-title { font-size: 18px; font-weight: 700; color: #f1e5ff; }
+        .modal-close { background: none; border: none; color: #9b8eaa; font-size: 24px; cursor: pointer; padding: 4px 8px; }
+        .modal-close:hover { color: #fff; }
+        .modal-body { max-height: 65vh; overflow-y: auto; padding-right: 4px; }
+
+        /* ===== Form ===== */
+        .form-group { margin-bottom: 16px; }
+        .form-label { display: block; font-size: 13px; color: #bcacc4; margin-bottom: 6px; font-weight: 600; }
+        .form-input, .form-textarea, .form-select {
+            width: 100%; padding: 10px 14px; border-radius: 12px;
+            background: rgba(60,45,75,0.8); border: 1.5px solid rgba(190,150,130,0.4);
+            color: #e3d7f0; font-size: 14px; outline: none; transition: border-color .2s;
+            font-family: inherit;
+        }
+        .form-input:focus, .form-textarea:focus, .form-select:focus { border-color: #dba05a; }
+        .form-textarea { resize: vertical; min-height: 70px; line-height: 1.5; }
+        .form-row { display: flex; gap: 12px; }
+        .form-row .form-group { flex: 1; }
+        .form-hint { font-size: 11px; color: #6e5c78; margin-top: 4px; }
+        .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+        .opt-grid { display: grid; grid-template-columns: auto 1fr; gap: 8px 10px; align-items: center; }
+        .opt-letter-tag {
+            width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            background: rgba(255,215,150,0.2); color: #f9d390; font-weight: 700; font-size: 12px;
+        }
+
+        /* ===== Toast ===== */
+        .toast {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            background: #dba05a; color: #1e1826; padding: 10px 24px;
+            border-radius: 30px; font-weight: bold; z-index: 9999;
+            opacity: 0; transition: opacity .3s; pointer-events: none;
+        }
+        .toast.show { opacity: 1; }
+
+        /* ===== Misc ===== */
+        .empty-state { text-align: center; padding: 40px 20px; color: #6e5c78; }
+        .empty-state .emoji { font-size: 48px; margin-bottom: 8px; display: block; }
+        .personality-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(280px,1fr)); gap: 12px; }
+        .personality-card {
+            background: rgba(45,35,55,0.7); border-radius: 14px; padding: 16px;
+            border: 1px solid rgba(215,185,140,0.15); transition: all .2s;
+        }
+        .personality-card:hover { border-color: rgba(219,160,90,0.4); transform: translateY(-2px); }
+        .personality-card .pcode { font-size: 18px; font-weight: 800; color: #f9d390; letter-spacing: 3px; font-family: monospace; }
+        .personality-card .pname { font-size: 14px; font-weight: 600; color: #f1e5ff; margin: 4px 0; }
+        .personality-card .pemoji { font-size: 24px; }
+        .personality-card .pdesc { font-size: 12px; color: #9b8eaa; line-height: 1.5; margin-top: 6px; }
+        .personality-card .pactions { display: flex; gap: 6px; margin-top: 10px; }
+
+        .record-row {
+            display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+            background: rgba(45,35,55,0.5); border-radius: 12px; margin-bottom: 6px;
+            border: 1px solid rgba(215,185,140,0.1);
+        }
+        .record-row .r-emoji { font-size: 20px; }
+        .record-row .r-code { font-weight: 700; color: #f9d390; font-family: monospace; letter-spacing: 1px; }
+        .record-row .r-name { color: #ddd; font-size: 13px; }
+        .record-row .r-percent { margin-left: auto; color: #7ec8a0; font-weight: 700; font-size: 13px; }
+        .record-row .r-time { color: #6e5c78; font-size: 11px; }
+
+        .link-btn {
+            background: none; border: none; color: #f9d390; cursor: pointer;
+            font-size: 13px; text-decoration: underline; padding: 0;
+        }
+        .link-btn:hover { color: #ffe5c4; }
+
+        .danger-zone {
+            border: 1px solid rgba(199,92,92,0.4); border-radius: 16px; padding: 20px;
+            background: rgba(199,92,92,0.08); margin-top: 16px;
+        }
+        .danger-zone h3 { color: #c75c5c; font-size: 15px; margin-bottom: 10px; }
+
+        @media (max-width: 600px) {
+            .form-row { flex-direction: column; }
+            .stats-grid { grid-template-columns: 1fr 1fr; }
+            .tab-btn { padding: 8px 12px; font-size: 13px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- ===== Login ===== -->
+    <div class="login-wrap" id="loginWrap">
+        <div class="login-box">
+            <span class="emoji">🔐</span>
+            <h1>HPTI 后台管理</h1>
+            <div class="sub">请输入管理密码</div>
+            <input type="password" id="pwdInput" placeholder="密码（默认 admin）" onkeydown="if(event.key==='Enter')doLogin()">
+            <button class="btn btn-primary" onclick="doLogin()">进入后台</button>
+            <div style="margin-top:16px;font-size:12px;color:#6e5c78;">默认密码: admin · 数据存储在服务器端</div>
+        </div>
+    </div>
+
+    <!-- ===== Admin Main ===== -->
+    <div class="admin-container" id="adminMain" style="display:none;">
+        <div class="admin-header">
+            <div class="admin-title">
+                <span class="emoji">🔮</span>
+                <div>
+                    <h1>HPTI 后台管理系统</h1>
+                    <span class="ver">隐藏人格类型指标 · 管理面板 v1.0</span>
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <a href="index.html" target="_blank" class="btn btn-outline btn-sm">🧪 打开测试</a>
+                <button class="btn btn-outline btn-sm" onclick="doLogout()">退出</button>
+            </div>
+        </div>
+
+        <div class="tab-nav">
+            <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 数据概览</button>
+            <button class="tab-btn" data-tab="questions" onclick="switchTab('questions')">📝 题库管理</button>
+            <button class="tab-btn" data-tab="personalities" onclick="switchTab('personalities')">🎭 人格库</button>
+            <button class="tab-btn" data-tab="rarity" onclick="switchTab('rarity')">💎 稀有度配置</button>
+            <button class="tab-btn" data-tab="records" onclick="switchTab('records')">📋 测试记录</button>
+            <button class="tab-btn" data-tab="data" onclick="switchTab('data')">💾 数据管理</button>
+        </div>
+
+        <div id="tab-dashboard" class="tab-content"></div>
+        <div id="tab-questions" class="tab-content" style="display:none;"></div>
+        <div id="tab-personalities" class="tab-content" style="display:none;"></div>
+        <div id="tab-rarity" class="tab-content" style="display:none;"></div>
+        <div id="tab-records" class="tab-content" style="display:none;"></div>
+        <div id="tab-data" class="tab-content" style="display:none;"></div>
+    </div>
+
+    <!-- ===== Modal ===== -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal-box">
+            <div class="modal-header">
+                <div class="modal-title" id="modalTitle">编辑</div>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast">已保存</div>
+
+    <script>
+    // ==================== 后端 API ====================
+    const API_BASE = ''; // 同源部署留空
+    let adminPwd = ''; // 保存在内存中
+
+    async function apiGet(path) {
+        const resp = await fetch(API_BASE + path, { headers: { 'X-Admin-Password': adminPwd } });
+        if (resp.status === 401) throw new Error('未授权');
+        return resp.json();
+    }
+    async function apiPost(path, body) {
+        const resp = await fetch(API_BASE + path, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Admin-Password': adminPwd },
+            body: JSON.stringify(body)
+        });
+        if (resp.status === 401) throw new Error('未授权');
+        return resp.json();
+    }
+    async function apiPut(path, body) {
+        const resp = await fetch(API_BASE + path, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-Admin-Password': adminPwd },
+            body: JSON.stringify(body)
+        });
+        if (resp.status === 401) throw new Error('未授权');
+        return resp.json();
+    }
+    async function apiDelete(path) {
+        const resp = await fetch(API_BASE + path, {
+            method: 'DELETE',
+            headers: { 'X-Admin-Password': adminPwd }
+        });
+        if (resp.status === 401) throw new Error('未授权');
+        return resp.json();
+    }
+
+    const dimKeys = ["sex","social","emotion","action","think","adventure"];
+    const dimLabels = {
+        sex:{first:"性开放",second:"性压抑",short:"性开放/性压抑"},
+        social:{first:"外向",second:"内向",short:"外向/内向"},
+        emotion:{first:"情绪稳定",second:"敏感多虑",short:"情绪稳定/敏感多虑"},
+        action:{first:"行动派",second:"拖延症",short:"行动派/拖延症"},
+        think:{first:"理性",second:"感性",short:"理性/感性"},
+        adventure:{first:"冒险",second:"谨慎",short:"冒险/谨慎"}
+    };
+    const dimFirstLetter = {sex:"O",social:"E",emotion:"S",action:"P",think:"T",adventure:"A"};
+    const dimSecondLetter = {sex:"R",social:"I",emotion:"N",action:"L",think:"F",adventure:"C"};
+    const rarityNames = {common:"常见",rare:"稀有",epic:"史诗",legendary:"传说"};
+
+    const DEFAULT_QUESTIONS = [
+        {dim:"sex",text:"面对浑身散发魅力的陌生人，你的自然反应是？",optA:"主动想象约会场景，甚至想立刻搭讪",optB:"会多注意几眼，但不会行动",optC:"无感，和平常一样",optD:"有点紧张，眼神回避",optE:"极度不安，想马上离开"},
+        {dim:"sex",text:"关于私密幻想，你通常？",optA:"非常丰富，还乐于和朋友分享趣事",optB:"有，但仅限于自己知道",optC:"偶尔闪过，不太在意",optD:"很少，觉得浪费时间",optE:"几乎不，甚至感到羞耻"},
+        {dim:"sex",text:"聚会中有人开尺度玩笑，你？",optA:"立刻加入，并抛出更劲爆的段子",optB:"跟着笑，觉得气氛不错",optC:"微笑不语，中立观望",optD:"低头刷手机，装作没听见",optE:"当场严肃制止，要求尊重"},
+        {dim:"sex",text:"与闺蜜/兄弟聊到私密话题，你？",optA:"主动分享细节，开成研讨会",optB:"适度参与，不回避",optC:"看话题是否安全再决定",optD:"尽量岔开，转移话题",optE:"坚决不聊，这是我的禁区"},
+        {dim:"sex",text:"看见情侣在公共场合热吻，你的感受？",optA:"真甜蜜，甚至想鼓掌叫好",optB:"正常，年轻人有激情",optC:"无感",optD:"有点尴尬，希望他们收敛",optE:"辣眼睛，有伤风化"},
+        {dim:"sex",text:"下面哪种说法最符合你的观念？",optA:"欲望是生命力，越坦荡越快乐",optB:"适度表达有助于身心健康",optC:"因人而异，不好评判",optD:"最好藏在心里，不要外露",optE:"欲望带来麻烦，清心寡欲最佳"},
+        {dim:"social",text:"周五晚收到聚会邀请，你的反应？",optA:"秒回“马上到！”，并呼朋引伴",optB:"开心答应，准备参加",optC:"纠结一会儿，看心情",optD:"犹豫，需要做心理建设",optE:"找借口拒绝，宁愿宅家"},
+        {dim:"social",text:"在一个满是陌生人的房间，你感觉？",optA:"兴奋，可以认识新朋友",optB:"自在，愿意主动聊天",optC:"先观察，再决定要不要社交",optD:"紧张，不知该说什么",optE:"想隐身，马上逃离"},
+        {dim:"social",text:"公司团建活动，你通常？",optA:"自动成为气氛担当，组织游戏",optB:"积极参与，配合大家",optC:"随大流，不主动不拒绝",optD:"安静跟着，只在必要时发言",optE:"缩在角落，祈祷别关注我"},
+        {dim:"social",text:"理想周末安排是？",optA:"约上一群朋友户外狂欢",optB:"和两三好友聚餐逛街",optC:"看心情，可能出门可能宅",optD:"大部分时间独处，偶尔见人",optE:"手机关机，与世隔绝"},
+        {dim:"social",text:"在电梯里碰到半熟的人，你会？",optA:"热情打招呼，顺势聊几句",optB:"微笑点头问好",optC:"看对方反应再回应",optD:"假装看手机，避免交流",optE:"紧盯楼层数，祈祷快点到"},
+        {dim:"social",text:"社交对你的意义是？",optA:"充电，越聊越精神",optB:"愉快的能量交换",optC:"生活的一部分，无好坏",optD:"消耗能量，需要控制",optE:"极度耗电，之后要独处回血"},
+        {dim:"emotion",text:"被上司当众批评后，你？",optA:"冷静分析问题，五分钟翻篇",optB:"短暂不快，但很快调整",optC:"当时难受，半天恢复",optD:"持续低落，反复回想",optE:"表面平静，内心崩溃"},
+        {dim:"emotion",text:"看了一部催泪电影，你通常？",optA:"感动但不影响情绪",optB:"略有感触，很快就淡了",optC:"当时哭了，过后忘记",optD:"情绪起伏大，需要几天平复",optE:"哭到停不下来，久久难以释怀"},
+        {dim:"emotion",text:"有人说你“想太多”或“敏感”，你？",optA:"完全不在意，我自岿然不动",optB:"稍微反思，但不受影响",optC:"看说话人是谁，重要则改",optD:"感到受伤，开始自我怀疑",optE:"瞬间emo，陷入精神内耗"},
+        {dim:"emotion",text:"原定计划突然改变，你？",optA:"毫无波澜，随机应变",optB:"稍作调整，适应良好",optC:"需要几分钟适应",optD:"烦躁但能接受",optE:"内心崩溃，表面还得微笑"},
+        {dim:"emotion",text:"深夜独自一人时，你容易？",optA:"倒头秒睡，品质优良",optB:"平静入睡，偶尔思考",optC:"偶尔胡思乱想",optD:"反复复盘今天的失误",optE:"越想越清醒，焦虑失眠"},
+        {dim:"emotion",text:"朋友玩笑开得过火，你？",optA:"当场怼回去或一笑了之",optB:"笑笑就过去了",optC:"有点介意但不说",optD:"表面笑，心里不舒服",optE:"表面笑，心里记小本本"},
+        {dim:"action",text:"任务截止还有一周，你？",optA:"已快完成，正在润色",optB:"进度良好，稳步推进",optC:"有了大致计划",optD:"酝酿中，过两天开动",optE:"不急，最后一天冲刺"},
+        {dim:"action",text:"你的桌面或房间通常是？",optA:"井井有条，物归原处",optB:"比较整洁，定期整理",optC:"不算乱也不算整齐",optD:"有点乱，但能找到东西",optE:"乱中有序，只有我自己懂"},
+        {dim:"action",text:"旅行前做攻略，你？",optA:"精确到小时的行程表",optB:"列出必去地点，留弹性",optC:"看攻略，但随意变化",optD:"大致看看，走到哪算哪",optE:"只订机票，其他随缘"},
+        {dim:"action",text:"闹钟响了，你？",optA:"立刻起床，精神抖擞",optB:"按掉就起，不赖床",optC:"偶尔赖几分钟",optD:"关掉再眯一会儿",optE:"按掉，然后睡过头"},
+        {dim:"action",text:"收到工作/学习消息，你？",optA:"秒回并立即处理",optB:"尽快回复，安排时间",optC:"看看内容，不急就等会",optD:"已读，想着晚点处理",optE:"标记未读，假装没看到"},
+        {dim:"action",text:"对清单/计划表的态度？",optA:"依赖清单，打勾是乐趣",optB:"会列，但不严格",optC:"偶尔列，经常忘记",optD:"脑子里有数就行",optE:"清单束缚灵魂，自由发挥"},
+        {dim:"think",text:"重大决定时，你更相信？",optA:"数据、表格、逻辑分析",optB:"理性分析为主，直觉为辅",optC:"理性感性各半",optD:"感觉为主，分析为辅",optE:"跟着感觉走，内心指引"},
+        {dim:"think",text:"朋友失恋痛哭，你首先？",optA:"分析原因，给出解决建议",optB:"先听，再给建设性意见",optC:"既安慰又分析",optD:"先安慰，情绪平复再说",optE:"递纸巾，陪骂，共情到底"},
+        {dim:"think",text:"争论时你最看重？",optA:"逻辑和证据，谁有道理",optB:"道理为主，兼顾语气",optC:"都重要",optD:"态度和语气很关键",optE:"你凶我，你就错了"},
+        {dim:"think",text:"一部烧脑电影，你会？",optA:"沉迷解谜，享受逻辑",optB:"边看边推理，乐趣多",optC:"剧情情感都关注",optD:"更在意角色命运",optE:"只要情感充沛，逻辑无所谓"},
+        {dim:"think",text:"你更欣赏哪种类型的人？",optA:"冷静理智、头脑清晰",optB:"理性不失温情",optC:"两者平衡",optD:"温暖有共情力",optE:"情感丰富、心灵共鸣"},
+        {dim:"think",text:"挑选礼物时，你通常？",optA:"列需求清单，选最实用",optB:"实用为主，也看喜好",optC:"实用心意各半",optD:"更注重心意和创意",optE:"凭感觉，相信心意最重要"},
+        {dim:"adventure",text:"有跳槽到初创公司的机会，你？",optA:"高风险高回报，拼了！",optB:"评估后大概率去",optC:"纠结，权衡利弊",optD:"倾向求稳，但会考虑",optE:"最终留在原公司，安全第一"},
+        {dim:"adventure",text:"一笔闲钱，你倾向于？",optA:"投资股票或加密货币",optB:"部分稳健，部分投资",optC:"分散配置",optD:"大部分稳健，小部分尝试",optE:"全部存定期或余额宝"},
+        {dim:"adventure",text:"蹦极、跳伞等极限运动，你？",optA:"人生清单，必打卡",optB:"有机会可以试试",optC:"不确定，看情况",optD:"有点怕，大概率不玩",optE:"绝不，脚踏实地最安全"},
+        {dim:"adventure",text:"去一家新餐厅，你点菜？",optA:"只点没吃过的奇特菜品",optB:"新旧搭配",optC:"看评价推荐",optD:"倾向熟悉的味道",optE:"只点招牌菜，避免踩雷"},
+        {dim:"adventure",text:"对于未来，你的态度？",optA:"拥抱未知，期待惊喜",optB:"乐观，但做点准备",optC:"既期待又担忧",optD:"希望稳定，小变化可接受",optE:"一切按计划最好"},
+        {dim:"adventure",text:"遇到没做过的新任务，你？",optA:"立刻接手，边做边学",optB:"评估可行性后尝试",optC:"需要时间考虑",optD:"先学习再行动",optE:"一定要培训完才敢开始"}
+    ];
+
+    const DEFAULT_PERSONALITIES = [
+        {code:"OESPTA",name:"社交恐怖分子",emoji:"🎉",rarity:"common",desc:"你就是人群中的高音喇叭，欲望直白，行动力爆炸。朋友聚会没你不行，但你一来屋顶都能掀翻。",traits:["人来疯晚期","欲望写在脸上","行动比脑子快","笑声震碎玻璃"],summary:"开放+外向+稳定+行动派+理性+冒险 = 行走的派对永动机。你的存在本身就是一个巨大的感叹号，永远在探索、表达和冲锋的路上。"},
+        {code:"OESPTC",name:"精致利己的咸鱼",emoji:"🛁",rarity:"common",desc:"思想上无比开放，行动上却精打细算。你享受生活，但绝不吃亏，是朋友圈里最会过日子的精致懒人。",traits:["享乐主义","规划躺平","外表精致","暗中观察"],summary:"开放+外向+稳定+行动派+理性+谨慎 = 人间清醒享乐派。你知道怎么让自己最舒服，而且总能优雅地避开所有坑。"},
+        {code:"OESNTA",name:"深夜emo艺术家",emoji:"🌙",rarity:"common",desc:"白天疯癫，晚上流泪。情感丰富得像一部八十集连续剧，一点小事就能脑补出前世今生。",traits:["情绪过山车","朋友圈诗人","深夜网易云","感性发电"],summary:"开放+外向+敏感+行动派+感性+冒险 = 感性世界的探险家。你敢爱敢恨敢emo，情感光谱比彩虹还宽。"},
+        {code:"OESNTC",name:"流泪猫猫头",emoji:"🐱",rarity:"common",desc:"敏感脆弱又可爱，内心戏比莎士比亚还多。做事谨慎，但表情包库存惊人，擅长用猫咪动图表达一切。",traits:["表情包战士","易碎品","温柔谨慎","网上重拳出击"],summary:"开放+外向+敏感+行动派+感性+谨慎 = 柔软而懂得保护自己的小可爱。你给世界的是一份需要小心轻放的温柔。"},
+        {code:"OEIPTA",name:"闷骚葫芦娃",emoji:"🥒",rarity:"rare",desc:"表面安静如鸡，内心狂野如虎。慢热到让人以为你是哑巴，熟络后才发现你是隐藏的段子手。",traits:["外冷内骚","慢热型话痨","暗中观察","突然爆梗"],summary:"开放+内向+稳定+行动派+理性+冒险 = 冷藏型火山。一旦被你信任的人打开，喷发的热情能融化一切。"},
+        {code:"OEIPTC",name:"社恐但爱网上冲浪",emoji:"🏄",rarity:"rare",desc:"现实中唯唯诺诺，互联网上重拳出击。谨慎小心却拥有一颗八卦的心，是群聊里的潜水冠军。",traits:["线上社牛","线下社恐","潜水大师","谨慎吃瓜"],summary:"开放+内向+稳定+行动派+理性+谨慎 = 赛博格社交家。你在数字世界里找到自由，现实只是偶尔的充电站。"},
+        {code:"OEINTA",name:"人间清醒白日梦",emoji:"🫧",rarity:"rare",desc:"情感细腻又敢于幻想，但行动力为零。大脑里已经过完一生，现实中还在床上翻身。",traits:["脑补王者","拖延幻想家","感性先锋","行动矮子"],summary:"开放+内向+敏感+行动派+感性+冒险 = 精神世界里的超级英雄。你的内心剧场每秒都在上演大片，可惜从未售票公映。"},
+        {code:"OEINTC",name:"脆皮鸭文学主角",emoji:"📖",rarity:"rare",desc:"内向敏感，内心却藏着一座同人图书馆。谨慎得连点赞都要思考三秒，却能在脑内写出百万字小说。",traits:["脑洞雷达","二次元住民","谨慎磕CP","精神食粮丰富"],summary:"开放+内向+敏感+行动派+感性+谨慎 = 精神世界的精致造物主。你把澎湃的想象力谨慎地收藏，只与极少人分享。"},
+        {code:"OELPTA",name:"DDL战神",emoji:"⚡",rarity:"epic",desc:"拖延癌晚期但总能奇迹般在截止前完成。散漫、外向、快乐，你的信条是：死线就是第一生产力。",traits:["死线冲刺","乐观拖延","即兴发挥","佛系社交"],summary:"开放+外向+稳定+拖延+理性+冒险 = 高压锅型天才。平时看似躺平，关键时刻爆发的小宇宙能让所有人震惊。"},
+        {code:"OELPTC",name:"懒癌治愈师",emoji:"🧘",rarity:"epic",desc:"看起来懒散，实则用最少能量维持生活平衡。你能坐着绝不站着，但总能优雅地完成必要任务。",traits:["节能大师","优雅摸鱼","表面躺平","暗中掌控"],summary:"开放+外向+稳定+拖延+理性+谨慎 = 最省力法则践行者。你发明了一套用20%力气达到80%效果的终极摸鱼哲学。"},
+        {code:"OELNTA",name:"随缘恋爱脑",emoji:"💘",rarity:"epic",desc:"感性又拖延，恋爱全靠缘分。你相信转角遇到爱，但永远宅在家里等快递，转角只有外卖小哥。",traits:["纸上谈情","等入室抢劫的爱情","情绪化浪漫","拖延表白"],summary:"开放+外向+敏感+拖延+感性+冒险 = 浪漫主义的咸鱼。你把爱情交给命运，自己负责在家等命运敲门。"},
+        {code:"RESPTA",name:"禁欲系卷王",emoji:"📚",rarity:"legendary",desc:"压抑所有欲望，将能量转化为生产力。表面是清心寡欲的学霸，内心可能藏着毁灭世界的幻想。",traits:["工作狂","表面冷淡","成就上瘾","压抑但强大"],summary:"压抑+外向+稳定+行动派+理性+冒险 = 穿着西装的野兽。你用高度自律压抑着火山般的能量，成就即是你的释放。"},
+        {code:"RESPTC",name:"自律的苦行僧",emoji:"⏰",rarity:"legendary",desc:"用计划表填满生活，逃避内心欲望。你的座右铭是：只要我够忙，寂寞就追不上我。",traits:["计划控","情感隔离","效率机器","健身狂魔"],summary:"压抑+外向+稳定+行动派+理性+谨慎 = 肉身成圣预备役。你用不可动摇的日常节奏，将欲望钉在十字架上。"},
+        {code:"RESNTA",name:"暴躁老哥在线",emoji:"💢",rarity:"legendary",desc:"平时沉默寡言，累积到一定值会突然爆炸。压抑的情绪像高压锅，一旦爆发方圆十里寸草不生。",traits:["易燃易爆","沉默中变态","突然发疯","情感核弹"],summary:"压抑+外向+敏感+行动派+感性+冒险 = 行走的休眠火山。你永远不知道哪句话会触发熔岩喷发，包括你自己。"},
+        {code:"RESNTC",name:"清心寡欲仙人",emoji:"🧘‍♂️",rarity:"legendary",desc:"理性、谨慎、敏感且压抑，感觉下一秒就要出家。你对世俗欲望微微一笑：一切皆是虚妄，除了早睡。",traits:["佛系青年","养生大师","情绪冷藏","精神飞升"],summary:"压抑+外向+敏感+行动派+感性+谨慎 = 半个出家人。你已在精神上抵达西天，只是肉身还在红尘里打卡上班。"},
+        {code:"REIPTA",name:"隐形卷心菜",emoji:"🥬",rarity:"epic",desc:"内向实干，默默卷死所有人。你以为他在躺平，其实他已经在终点线朝你微笑。",traits:["悄悄努力","惊艳所有人","沉默卷王","可靠工具人"],summary:"压抑+内向+稳定+行动派+理性+冒险 = 潜伏型大佬。你像一台静音马达，在没有观众的跑道上悄悄起飞。"},
+        {code:"REIPTC",name:"社恐手艺人",emoji:"🪡",rarity:"epic",desc:"不喜社交，专注一门手艺。你相信技术改变命运，交流只会带来尴尬，所以选择用作品说话。",traits:["工匠精神","社交回避","手作达人","安静大神"],summary:"压抑+内向+稳定+行动派+理性+谨慎 = 沉默的造物主。你在自己的手工作坊里创造世界，凡人的社交与你无关。"},
+        {code:"REINTA",name:"深海玻璃心",emoji:"🌊",rarity:"rare",desc:"极度敏感内向，像深海鱼一样怕光。内心戏丰富到可以拍电影，但表面波澜不惊。",traits:["易碎品","深度内耗","灵魂诗人","孤独美食家"],summary:"压抑+内向+敏感+行动派+感性+冒险 = 情感深海探测器。你能感知到最微小的情绪波动，但很少浮出海面展示。"},
+        {code:"REINTC",name:"全网无前任",emoji:"🔒",rarity:"rare",desc:"谨慎、内向、情感封闭，活得像一个保密局。没人知道你的过去，包括你自己。",traits:["神秘莫测","情感保险箱","社交绝缘体","安全第一"],summary:"压抑+内向+敏感+行动派+感性+谨慎 = 行走的秘密花园。你把自己层层保护，钥匙可能早被你扔进了深海。"},
+        {code:"RELPTA",name:"拖延摆烂大师",emoji:"🍂",rarity:"common",desc:"既压抑又拖延，经常在最后一刻放弃治疗。你最大的运动量是翻身，最大的冒险是今天不点外卖。",traits:["拖延癌","躺平学专家","间歇性奋发","持续性摆烂"],summary:"压抑+外向+稳定+拖延+理性+冒险 = 躺平学博士生。你在摆烂和奋起之间仰卧起坐，腹肌没练出来但精神可嘉。"},
+        {code:"RELNTA",name:"emo哥布林",emoji:"👾",rarity:"common",desc:"感性、拖延、压抑，每天在emo和摆烂之间反复横跳。你的梦想是成为废物，可惜连废物都当不彻底。",traits:["深夜流泪","行动力归零","情绪垃圾桶","自嘲大师"],summary:"压抑+外向+敏感+拖延+感性+冒险 = 情绪沼泽漫步者。你一边沉溺于悲伤一边在deadline前疯狂输出，矛盾但迷人。"},
+        {code:"RILNTC",name:"纯狱风禁欲大师",emoji:"⛓️",rarity:"legendary",desc:"典型性压抑代表。内心欲望暗涌，表面不动声色。你擅长把黄色废料转化为冷笑话，用幽默掩饰躁动。",traits:["性压抑天花板","冷笑话生成器","暗骚难防","嘴上说不要"],summary:"压抑+内向+敏感+拖延+感性+谨慎 = 圣光下的暗影。你用最厚的盾守护最深的欲，是禁欲系文学的最佳主角。"},
+        {code:"RILPTA",name:"闷声作大死",emoji:"💣",rarity:"rare",desc:"内向拖延，却偶尔做出惊世骇俗的举动。平时沉默寡言，一搞就搞个大新闻。",traits:["闷声发疯","拖延爆发","出其不意","行为艺术"],summary:"压抑+内向+稳定+拖延+理性+冒险 = 定时炸弹型人才。你长期的沉默让偶尔的爆发更加惊天动地。"},
+        {code:"RISPTA",name:"冰火两重天",emoji:"🧊🔥",rarity:"rare",desc:"极度内向稳定，外表冰山，内心熔岩。压抑的激情只在特定场合喷发，反差大到让人震惊。",traits:["反差萌","冷静疯批","深情闷骚","爆发力强"],summary:"压抑+内向+稳定+行动派+理性+冒险 = 极地火山。冷到极致的外壳下，是足以融化一切的热情，只是开关隐秘。"},
+        {code:"RISNTC",name:"古墓派守墓人",emoji:"🏚️",rarity:"rare",desc:"安静敏感又谨慎，像生活在古墓里。你与世无争，只想在自己的小世界里安静养老。",traits:["宅神","社恐十级","内心平和","古董生活"],summary:"压抑+内向+稳定+拖延+感性+谨慎 = 现代隐士。你在大都市里活出了深山老林的气质，外卖是唯一的文明链接。"},
+        {code:"RILNTA",name:"流泪垃圾桶",emoji:"🗑️",rarity:"epic",desc:"敏感拖延还压抑，经常感觉自己是个情绪垃圾桶。你看喜剧会哭，看悲剧更哭，感动自己第一人。",traits:["泪腺发达","忧郁诗人","自我感动","悲伤逆流成河"],summary:"压抑+内向+敏感+拖延+感性+冒险 = 行走的眼泪制造机。你的悲伤是全方位的，连幸福都让你感动到落泪。"},
+        {code:"OILNTC",name:"悄悄享乐主义者",emoji:"🍰",rarity:"common",desc:"内向谨慎，但私下非常懂得享受。你一个人吃大餐、看电影、旅行，快乐从不需要观众。",traits:["独乐乐","隐秘的放纵","精致社恐","自我宠溺"],summary:"开放+内向+敏感+拖延+感性+谨慎 = 隐蔽的快乐星球主。你精心经营着自己的小宇宙，外人只看到安静的表面。"},
+        {code:"OILPTA",name:"浪子回头金不换",emoji:"🎸",rarity:"rare",desc:"随性内向，灵感来了谁也拦不住。你活得像一阵风，吹过就走，留下一地才华和没洗的袜子。",traits:["浪子气质","即兴创作","拖延艺术家","不羁生活"],summary:"开放+内向+稳定+拖延+理性+冒险 = 灵感型流浪者。你追逐内心的风，却常常忘记洗袜子和回消息。"},
+        {code:"OISNTC",name:"人间观察员",emoji:"🦉",rarity:"common",desc:"内向稳重，静静观察世间万物。你有一双洞察一切的眼睛，和一张永远闭着的嘴。",traits:["暗中观察","沉默智者","内心弹幕","佛系点评"],summary:"开放+内向+稳定+行动派+感性+谨慎 = 社会实验记录者。你收集人间百态，但从不发表论文，只在自己心里存档。"},
+        {code:"RILPT2",name:"摆烂但没完全摆",emoji:"🧩",rarity:"rare",desc:"你想躺平，但潜意识还在挣扎。每次说要放弃，身体却很诚实地继续努力，是矛盾本盾。",traits:["仰卧起坐","摆烂未遂","口是心非","间歇性努力"],summary:"压抑+内向+稳定+拖延+理性+谨慎 = 奋斗型咸鱼。你嘴上说着算了，身体却在deadline前爆发出惊人的执行力。"},
+        {code:"RELNTC",name:"活体矛盾指南",emoji:"🎲",rarity:"epic",desc:"身上全是矛盾：想社交又怕人，想躺平又焦虑，想恋爱又嫌麻烦。你就是一本行走的纠结教科书。",traits:["选择困难","内心战争","拖延又自责","纠结之王"],summary:"压抑+外向+敏感+拖延+感性+谨慎 = 矛盾综合体。你的内心永远有两个小人在打架，而你是那个吃瓜的围观群众。"},
+        {code:"RELPTC",name:"终极废物逆袭",emoji:"🐛",rarity:"epic",desc:"拖延且压抑，但关键时刻总能爆发小宇宙。你是那种平时像虫，关键时刻化龙的神奇生物。",traits:["死线奇迹","逆袭专业户","隐藏大佬","深藏不露"],summary:"压抑+外向+稳定+拖延+理性+谨慎 = 沉睡的哥斯拉。平时的你是个懒散小透明，直到危机来临才展现真正的力量。"},
+        {code:"OESNT2",name:"快乐沙雕",emoji:"🤪",rarity:"common",desc:"开放外向，感性冲动，快乐至上。你的存在就是为了证明，人类智商的下限可以有多低，快乐就可以有多高。",traits:["沙雕网友","快乐病毒","智商掉线","气氛组组长"],summary:"开放+外向+敏感+行动派+感性+冒险 = 快乐制造机。你的人生信条是：笑就完了，想那么多干嘛？"},
+        {code:"OELPT2",name:"聪明绝顶的懒虫",emoji:"🦥",rarity:"rare",desc:"懒到极致却效率奇高，能用一分钟解决的绝不用两分钟。你的人生智慧是：懒，才是第一生产力。",traits:["懒人科技","效率鬼才","最省力法则","优雅摸鱼"],summary:"开放+外向+稳定+拖延+理性+谨慎 = 懒惰界的爱因斯坦。你为了能多躺一会，愿意动脑找出最快完成工作的办法。"},
+        {code:"RISNTA",name:"斯文败类预备役",emoji:"🎩",rarity:"legendary",desc:"表面文质彬彬，内心暗流涌动。你压抑着破坏欲，随时可能撕破正经面具，吓所有人一跳。",traits:["衣冠禽兽","压抑的疯狂","斯文外表","内心野兽"],summary:"压抑+内向+敏感+行动派+感性+冒险 = 伪装成绵羊的狼。你彬彬有礼的外表下，藏着一个随时可能出笼的野兽。"},
+        {code:"OILPTC",name:"精致废物点心",emoji:"🍮",rarity:"rare",desc:"内向、拖延、谨慎，却追求生活品质。你是那种连摆烂都要摆得漂漂亮亮的人，废物也要做最精致的那一个。",traits:["精致穷","仪式感废物","美观第一","拖延美学"],summary:"开放+内向+稳定+拖延+感性+谨慎 = 美学型躺平专家。你连颓废都要保持优雅，是废墟里开出的花。"}
+    ];
+
+    const DEFAULT_RARITY = {
+        common:{percent:'32%',text:'每3个人里就有1个你，俗称"烂大街的宝藏"，虽然多但每个都是独一无二的沙雕。'},
+        rare:{percent:'12%',text:'班级里的稀有物种，大概一个班能抓出5只。你的存在让小组作业多了几分不确定。'},
+        epic:{percent:'3.7%',text:'全公司就你一个这样的，开会时自带BGM的珍兽，建议列入办公室保护名录。'},
+        legendary:{percent:'0.01%',text:'真正的万中无一！你就像是煎饼果子里吃出钻石，科学家建议研究你的基因序列。'}
+    };
+
+    // ==================== State ====================
+    let appData = null;
+    let currentTab = 'dashboard';
+    let qFilter = 'all';
+    let pFilter = 'all';
+    let pSearch = '';
+
+    // ==================== Storage (Backend API) ====================
+    async function loadData() {
+        try {
+            const json = await apiGet('/api/config');
+            if (json.config && json.config.questions && json.config.questions.length > 0) {
+                return {
+                    questions: json.config.questions,
+                    personalities: json.config.personalities || DEFAULT_PERSONALITIES,
+                    rarityInfo: json.config.rarityInfo || DEFAULT_RARITY,
+                    testRecords: []
+                };
+            }
+        } catch(e) { /* 后端未配置，使用默认 */ }
+        // 初始化默认数据
+        const data = {
+            questions: JSON.parse(JSON.stringify(DEFAULT_QUESTIONS)),
+            personalities: JSON.parse(JSON.stringify(DEFAULT_PERSONALITIES)),
+            rarityInfo: JSON.parse(JSON.stringify(DEFAULT_RARITY)),
+            testRecords: []
+        };
+        // 保存默认配置到后端
+        try { await apiPut('/api/config', data); } catch(e) {}
+        return data;
+    }
+
+    async function saveData() {
+        try {
+            await apiPut('/api/config', {
+                questions: appData.questions,
+                personalities: appData.personalities,
+                rarityInfo: appData.rarityInfo
+            });
+        } catch(e) { showToast('保存到后端失败', true); }
+    }
+
+    async function resetData() {
+        appData = {
+            questions: JSON.parse(JSON.stringify(DEFAULT_QUESTIONS)),
+            personalities: JSON.parse(JSON.stringify(DEFAULT_PERSONALITIES)),
+            rarityInfo: JSON.parse(JSON.stringify(DEFAULT_RARITY)),
+            testRecords: []
+        };
+        await saveData();
+    }
+
+    // ==================== Login ====================
+    async function doLogin() {
+        const pwd = document.getElementById('pwdInput').value;
+        if (!pwd) { showToast('请输入密码', true); return; }
+        try {
+            const json = await apiPost('/api/login', { password: pwd });
+            if (json.success) {
+                adminPwd = pwd;
+                document.getElementById('loginWrap').style.display = 'none';
+                document.getElementById('adminMain').style.display = 'block';
+                appData = await loadData();
+                switchTab('dashboard');
+                showToast('欢迎回来');
+            } else {
+                showToast('密码错误', true);
+            }
+        } catch(e) {
+            showToast('无法连接服务器', true);
+        }
+    }
+
+    function doLogout() {
+        adminPwd = '';
+        document.getElementById('loginWrap').style.display = 'flex';
+        document.getElementById('adminMain').style.display = 'none';
+        document.getElementById('pwdInput').value = '';
+        appData = null;
+    }
+
+    // ==================== Tab Switching ====================
+    function switchTab(tab) {
+        currentTab = tab;
+        document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+        document.getElementById('tab-' + tab).style.display = 'block';
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+        if (tab === 'dashboard') renderDashboard();
+        if (tab === 'questions') renderQuestions();
+        if (tab === 'personalities') renderPersonalities();
+        if (tab === 'rarity') renderRarity();
+        if (tab === 'records') renderRecords();
+        if (tab === 'data') renderData();
+    }
+
+    // ==================== Dashboard ====================
+    async function renderDashboard() {
+        const qCount = appData.questions.length;
+        const pCount = appData.personalities.length;
+        const dimCounts = {};
+        dimKeys.forEach(d => dimCounts[d] = 0);
+        appData.questions.forEach(q => { if (dimCounts[q.dim] !== undefined) dimCounts[q.dim]++; });
+        const rarityCounts = {common:0, rare:0, epic:0, legendary:0};
+        appData.personalities.forEach(p => { if (rarityCounts[p.rarity] !== undefined) rarityCounts[p.rarity]++; });
+
+        // 从后端获取测试统计
+        let stats = { total: 0, byRarity: {}, topPersonality: null, todayCount: 0, trend: [], avgMatch: 0 };
+        try {
+            stats = await apiGet('/api/stats');
+        } catch(e) {}
+
+        const rCount = stats.total || 0;
+        const trendHTML = (stats.trend || []).map(t => {
+            const dateLabel = t.date.slice(5).replace('-', '/');
+            return `<span class="dim-chip">${dateLabel}: <b>${t.count}</b></span>`;
+        }).join('');
+
+        document.getElementById('tab-dashboard').innerHTML = `
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">📝</div>
+                    <div class="stat-num">${qCount}</div>
+                    <div class="stat-label">题目总数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🎭</div>
+                    <div class="stat-num">${pCount}</div>
+                    <div class="stat-label">人格类型</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-num">${rCount}</div>
+                    <div class="stat-label">测试记录</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">📅</div>
+                    <div class="stat-num">${stats.todayCount || 0}</div>
+                    <div class="stat-label">今日测试</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">📐 各维度题目分布</div>
+                <div class="dim-stats">
+                    ${dimKeys.map(d => `<span class="dim-chip">${dimLabels[d].short}: <b>${dimCounts[d]}</b> 题</span>`).join('')}
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">💎 人格稀有度分布</div>
+                <div class="rarity-stats">
+                    ${Object.entries(rarityCounts).map(([k,v]) => `<span class="rarity-chip ${k}">${rarityNames[k]}: ${v}</span>`).join('')}
+                </div>
+            </div>
+
+            ${rCount > 0 ? `
+            <div class="card">
+                <div class="card-title">🏆 测试统计</div>
+                <div style="font-size:14px;color:#ddd;line-height:2;">
+                    总测试次数: <b style="color:#f9d390;">${rCount}</b> 次<br>
+                    今日测试: <b style="color:#f9d390;">${stats.todayCount || 0}</b> 次<br>
+                    平均匹配度: <b style="color:#f9d390;">${stats.avgMatch || 0}%</b><br>
+                    最热门人格: <b style="color:#f9d390;">${stats.topPersonality ? stats.topPersonality.name : '-'}</b>${stats.topPersonality ? ' （出现 ' + stats.topPersonality.count + ' 次）' : ''}
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">📈 近7天测试趋势</div>
+                <div class="dim-stats">${trendHTML}</div>
+            </div>` : `
+            <div class="card">
+                <div class="card-title">🏆 测试统计</div>
+                <div class="empty-state">
+                    <span class="emoji">📭</span>
+                    暂无测试记录，等待用户完成测试后这里会显示统计数据
+                </div>
+            </div>`}
+        `;
+    }
+
+    // ==================== Questions ====================
+    function renderQuestions() {
+        let filtered = appData.questions;
+        if (qFilter !== 'all') filtered = filtered.filter(q => q.dim === qFilter);
+
+        document.getElementById('tab-questions').innerHTML = `
+            <div class="card">
+                <div class="card-title">
+                    <span>📝 题库管理（共 ${appData.questions.length} 题）</span>
+                    <button class="btn btn-primary btn-sm" onclick="openQuestionEditor()">+ 新增题目</button>
+                </div>
+                <div class="filter-bar">
+                    <select onchange="qFilter=this.value;renderQuestions()">
+                        <option value="all">全部维度</option>
+                        ${dimKeys.map(d => `<option value="${d}" ${qFilter===d?'selected':''}>${dimLabels[d].short}</option>`).join('')}
+                    </select>
+                    <div class="spacer"></div>
+                    <span style="color:#9b8eaa;font-size:13px;">显示 ${filtered.length} 题</span>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>维度</th>
+                                <th>题目</th>
+                                <th>选项预览</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filtered.map((q, i) => {
+                                const realIdx = appData.questions.indexOf(q);
+                                return `
+                                <tr>
+                                    <td>${i+1}</td>
+                                    <td><span class="badge badge-dim-${q.dim}">${dimLabels[q.dim].short}</span></td>
+                                    <td style="max-width:280px;">${q.text}</td>
+                                    <td style="max-width:300px;font-size:12px;color:#9b8eaa;">
+                                        A: ${q.optA.substring(0,15)}...<br>
+                                        B: ${q.optB.substring(0,15)}...<br>
+                                        C: ${q.optC.substring(0,15)}...
+                                    </td>
+                                    <td style="white-space:nowrap;">
+                                        <button class="btn btn-outline btn-sm" onclick="openQuestionEditor(${realIdx})">编辑</button>
+                                        <button class="btn btn-danger btn-sm" onclick="deleteQuestion(${realIdx})">删除</button>
+                                    </td>
+                                </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                ${filtered.length === 0 ? '<div class="empty-state"><span class="emoji">🔍</span>没有匹配的题目</div>' : ''}
+            </div>
+        `;
+    }
+
+    function openQuestionEditor(idx) {
+        const isEdit = idx !== undefined && idx !== null;
+        const q = isEdit ? appData.questions[idx] : {dim:'sex',text:'',optA:'',optB:'',optC:'',optD:'',optE:''};
+        openModal(isEdit ? '编辑题目' : '新增题目', `
+            <div class="form-group">
+                <label class="form-label">维度</label>
+                <select class="form-select" id="q-dim">
+                    ${dimKeys.map(d => `<option value="${d}" ${q.dim===d?'selected':''}>${dimLabels[d].short}</option>`).join('')}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">题目文本</label>
+                <textarea class="form-textarea" id="q-text" placeholder="输入题目...">${q.text}</textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">选项（A=+2 开放端 / E=-2 压抑端）</label>
+                <div class="opt-grid">
+                    <span class="opt-letter-tag">A</span>
+                    <input class="form-input" id="q-a" value="${q.optA}" placeholder="选项A（+2分）">
+                    <span class="opt-letter-tag">B</span>
+                    <input class="form-input" id="q-b" value="${q.optB}" placeholder="选项B（+1分）">
+                    <span class="opt-letter-tag">C</span>
+                    <input class="form-input" id="q-c" value="${q.optC}" placeholder="选项C（0分 中立）">
+                    <span class="opt-letter-tag">D</span>
+                    <input class="form-input" id="q-d" value="${q.optD}" placeholder="选项D（-1分）">
+                    <span class="opt-letter-tag">E</span>
+                    <input class="form-input" id="q-e" value="${q.optE}" placeholder="选项E（-2分）">
+                </div>
+            </div>
+            <div class="form-actions">
+                <button class="btn btn-outline" onclick="closeModal()">取消</button>
+                <button class="btn btn-primary" onclick="saveQuestion(${isEdit?idx:-1})">保存</button>
+            </div>
+        `);
+    }
+
+    async function saveQuestion(idx) {
+        const q = {
+            dim: document.getElementById('q-dim').value,
+            text: document.getElementById('q-text').value.trim(),
+            optA: document.getElementById('q-a').value.trim(),
+            optB: document.getElementById('q-b').value.trim(),
+            optC: document.getElementById('q-c').value.trim(),
+            optD: document.getElementById('q-d').value.trim(),
+            optE: document.getElementById('q-e').value.trim()
+        };
+        if (!q.text || !q.optA || !q.optB || !q.optC || !q.optD || !q.optE) {
+            showToast('请填写所有字段', true); return;
+        }
+        if (idx >= 0) {
+            appData.questions[idx] = q;
+        } else {
+            appData.questions.push(q);
+        }
+        await saveData();
+        closeModal();
+        renderQuestions();
+        showToast(idx >= 0 ? '已更新' : '已添加');
+    }
+
+    async function deleteQuestion(idx) {
+        if (!confirm(`确认删除这道题？\n"${appData.questions[idx].text.substring(0,30)}..."`)) return;
+        appData.questions.splice(idx, 1);
+        await saveData();
+        renderQuestions();
+        showToast('已删除');
+    }
+
+    // ==================== Personalities ====================
+    function renderPersonalities() {
+        let filtered = appData.personalities;
+        if (pFilter !== 'all') filtered = filtered.filter(p => p.rarity === pFilter);
+        if (pSearch) filtered = filtered.filter(p =>
+            p.code.toLowerCase().includes(pSearch.toLowerCase()) ||
+            p.name.includes(pSearch)
+        );
+
+        document.getElementById('tab-personalities').innerHTML = `
+            <div class="card">
+                <div class="card-title">
+                    <span>🎭 人格库管理（共 ${appData.personalities.length} 个）</span>
+                    <button class="btn btn-primary btn-sm" onclick="openPersonalityEditor()">+ 新增人格</button>
+                </div>
+                <div class="filter-bar">
+                    <select onchange="pFilter=this.value;renderPersonalities()">
+                        <option value="all">全部稀有度</option>
+                        <option value="common" ${pFilter==='common'?'selected':''}>常见</option>
+                        <option value="rare" ${pFilter==='rare'?'selected':''}>稀有</option>
+                        <option value="epic" ${pFilter==='epic'?'selected':''}>史诗</option>
+                        <option value="legendary" ${pFilter==='legendary'?'selected':''}>传说</option>
+                    </select>
+                    <input type="text" placeholder="搜索代号或名称..." value="${pSearch}"
+                        oninput="pSearch=this.value;renderPersonalities()">
+                    <div class="spacer"></div>
+                    <span style="color:#9b8eaa;font-size:13px;">显示 ${filtered.length} 个</span>
+                </div>
+                <div class="personality-grid">
+                    ${filtered.map(p => {
+                        const realIdx = appData.personalities.indexOf(p);
+                        return `
+                        <div class="personality-card">
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <span class="pemoji">${p.emoji}</span>
+                                <span class="pcode">${p.code}</span>
+                                <span class="badge badge-${p.rarity}" style="margin-left:auto;">${rarityNames[p.rarity]}</span>
+                            </div>
+                            <div class="pname">${p.name}</div>
+                            <div class="pdesc">${p.desc.substring(0,50)}...</div>
+                            <div class="pactions">
+                                <button class="btn btn-outline btn-sm" onclick="openPersonalityEditor(${realIdx})">编辑</button>
+                                <button class="btn btn-danger btn-sm" onclick="deletePersonality(${realIdx})">删除</button>
+                            </div>
+                        </div>`;
+                    }).join('')}
+                </div>
+                ${filtered.length === 0 ? '<div class="empty-state"><span class="emoji">🔍</span>没有匹配的人格类型</div>' : ''}
+            </div>
+        `;
+    }
+
+    function openPersonalityEditor(idx) {
+        const isEdit = idx !== undefined && idx !== null;
+        const p = isEdit ? appData.personalities[idx] : {code:'',name:'',emoji:'🆕',rarity:'common',desc:'',traits:[],summary:''};
+        openModal(isEdit ? '编辑人格' : '新增人格', `
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">代号 (6位)</label>
+                    <input class="form-input" id="p-code" value="${p.code}" placeholder="如 OESPTA" maxlength="6" style="font-family:monospace;text-transform:uppercase;">
+                    <div class="form-hint">格式: O/R + E/I + S/N + P/L + T/F + A/C</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Emoji</label>
+                    <input class="form-input" id="p-emoji" value="${p.emoji}" placeholder="🎭">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">名称</label>
+                    <input class="form-input" id="p-name" value="${p.name}" placeholder="人格名称">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">稀有度</label>
+                    <select class="form-select" id="p-rarity">
+                        <option value="common" ${p.rarity==='common'?'selected':''}>常见</option>
+                        <option value="rare" ${p.rarity==='rare'?'selected':''}>稀有</option>
+                        <option value="epic" ${p.rarity==='epic'?'selected':''}>史诗</option>
+                        <option value="legendary" ${p.rarity==='legendary'?'selected':''}>传说</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">描述</label>
+                <textarea class="form-textarea" id="p-desc" placeholder="人格描述...">${p.desc}</textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">核心解析</label>
+                <textarea class="form-textarea" id="p-summary" placeholder="性格核心解析...">${p.summary}</textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">特质标签（逗号分隔）</label>
+                <input class="form-input" id="p-traits" value="${p.traits.join(', ')}" placeholder="标签1, 标签2, 标签3">
+            </div>
+            <div class="form-actions">
+                <button class="btn btn-outline" onclick="closeModal()">取消</button>
+                <button class="btn btn-primary" onclick="savePersonality(${isEdit?idx:-1})">保存</button>
+            </div>
+        `);
+    }
+
+    async function savePersonality(idx) {
+        const p = {
+            code: document.getElementById('p-code').value.trim().toUpperCase(),
+            name: document.getElementById('p-name').value.trim(),
+            emoji: document.getElementById('p-emoji').value.trim() || '🆕',
+            rarity: document.getElementById('p-rarity').value,
+            desc: document.getElementById('p-desc').value.trim(),
+            summary: document.getElementById('p-summary').value.trim(),
+            traits: document.getElementById('p-traits').value.split(',').map(t=>t.trim()).filter(t=>t)
+        };
+        if (!p.code || !p.name || !p.desc) { showToast('请填写代号、名称和描述', true); return; }
+        if (idx >= 0) {
+            appData.personalities[idx] = p;
+        } else {
+            if (appData.personalities.some(x => x.code === p.code)) {
+                showToast('代号已存在', true); return;
+            }
+            appData.personalities.push(p);
+        }
+        await saveData();
+        closeModal();
+        renderPersonalities();
+        showToast(idx >= 0 ? '已更新' : '已添加');
+    }
+
+    async function deletePersonality(idx) {
+        if (!confirm(`确认删除人格「${appData.personalities[idx].name}」？`)) return;
+        appData.personalities.splice(idx, 1);
+        await saveData();
+        renderPersonalities();
+        showToast('已删除');
+    }
+
+    // ==================== Rarity ====================
+    function renderRarity() {
+        document.getElementById('tab-rarity').innerHTML = `
+            <div class="card">
+                <div class="card-title">💎 稀有度配置</div>
+                <div class="form-hint" style="margin-bottom:16px;">配置各稀有度等级的占比和描述文案，保存后立即生效。</div>
+                ${Object.entries(appData.rarityInfo).map(([key, info]) => `
+                    <div style="background:rgba(60,45,75,0.5);border-radius:14px;padding:16px;margin-bottom:12px;">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                            <span class="badge badge-${key}">${rarityNames[key]}</span>
+                            <span style="font-size:13px;color:#9b8eaa;">${key}</span>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">人群占比</label>
+                            <input class="form-input" id="rarity-${key}-percent" value="${info.percent}" placeholder="如 32%">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">描述文案</label>
+                            <textarea class="form-textarea" id="rarity-${key}-text">${info.text}</textarea>
+                        </div>
+                    </div>
+                `).join('')}
+                <div class="form-actions">
+                    <button class="btn btn-primary" onclick="saveRarity()">💾 保存全部</button>
+                </div>
+            </div>
+        `;
+    }
+
+    async function saveRarity() {
+        Object.keys(appData.rarityInfo).forEach(key => {
+            appData.rarityInfo[key].percent = document.getElementById(`rarity-${key}-percent`).value.trim();
+            appData.rarityInfo[key].text = document.getElementById(`rarity-${key}-text`).value.trim();
+        });
+        await saveData();
+        showToast('稀有度配置已保存');
+    }
+
+    // ==================== Records ====================
+    async function renderRecords() {
+        document.getElementById('tab-records').innerHTML = '<div class="card"><div class="empty-state"><span class="emoji">⏳</span>加载中...</div></div>';
+        let results = [];
+        try {
+            const json = await apiGet('/api/results');
+            results = json.results || [];
+        } catch(e) {
+            document.getElementById('tab-records').innerHTML = '<div class="card"><div class="empty-state"><span class="emoji">⚠️</span>加载失败，请检查网络连接</div></div>';
+            return;
+        }
+        document.getElementById('tab-records').innerHTML = `
+            <div class="card">
+                <div class="card-title">
+                    <span>📋 测试记录（共 ${results.length} 条）</span>
+                    ${results.length > 0 ? `<button class="btn btn-danger btn-sm" onclick="clearRecords()">清空记录</button>` : ''}
+                </div>
+                ${results.length === 0 ? `
+                    <div class="empty-state">
+                        <span class="emoji">📭</span>
+                        暂无测试记录
+                    </div>
+                ` : `
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Emoji</th><th>代号</th><th>名称</th><th>匹配度</th><th>稀有度</th><th>时间</th></tr>
+                            </thead>
+                            <tbody>
+                                ${results.map(r => `
+                                    <tr>
+                                        <td style="font-size:20px;">${r.personalityEmoji||'🎭'}</td>
+                                        <td class="code-cell">${r.personalityCode}</td>
+                                        <td class="name-cell">${r.personalityName}</td>
+                                        <td><span style="color:#7ec8a0;font-weight:700;">${r.matchPercent}%</span></td>
+                                        <td><span class="badge badge-${r.rarity||'common'}">${rarityNames[r.rarity]||'-'}</span></td>
+                                        <td style="color:#6e5c78;font-size:12px;">${new Date(r.timestamp).toLocaleString('zh-CN')}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `}
+            </div>
+        `;
+    }
+
+    async function clearRecords() {
+        if (!confirm('确认清空所有测试记录？此操作不可恢复。')) return;
+        try {
+            await apiDelete('/api/results');
+            renderRecords();
+            showToast('记录已清空');
+        } catch(e) { showToast('清空失败', true); }
+    }
+
+    // ==================== Data Management ====================
+    function renderData() {
+        document.getElementById('tab-data').innerHTML = `
+            <div class="card">
+                <div class="card-title">💾 数据导入导出</div>
+                <div class="form-hint" style="margin-bottom:16px;">所有数据存储在服务器端，可导出为 JSON 文件备份，也可从文件导入恢复。</div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;">
+                    <button class="btn btn-primary" onclick="exportData()">📤 导出全部数据</button>
+                    <label class="btn btn-outline" style="cursor:pointer;">
+                        📥 导入数据
+                        <input type="file" accept=".json" style="display:none;" onchange="importData(event)">
+                    </label>
+                </div>
+                <div style="background:rgba(60,45,75,0.5);border-radius:12px;padding:14px;font-size:13px;color:#9b8eaa;line-height:1.8;">
+                    <b style="color:#f5d7b0;">当前数据统计：</b><br>
+                    · 题目: ${appData.questions.length} 题<br>
+                    · 人格: ${appData.personalities.length} 个<br>
+                    · 稀有度: ${Object.keys(appData.rarityInfo).length} 级<br>
+                    · 存储方式: 服务器端 JSON 文件
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">🔐 修改管理密码</div>
+                <div class="form-group">
+                    <label class="form-label">新密码</label>
+                    <input class="form-input" id="newPwd" type="password" placeholder="输入新密码">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">确认密码</label>
+                    <input class="form-input" id="newPwd2" type="password" placeholder="再次输入新密码">
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="changePwd()">修改密码</button>
+            </div>
+
+            <div class="danger-zone">
+                <h3>⚠️ 危险操作区</h3>
+                <div class="form-hint" style="margin-bottom:12px;">以下操作将重置服务器端数据，不可恢复，请谨慎执行。</div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                    <button class="btn btn-danger" onclick="resetQuestions()">重置题库为默认</button>
+                    <button class="btn btn-danger" onclick="resetPersonalities()">重置人格库为默认</button>
+                    <button class="btn btn-danger" onclick="resetAll()">⚡ 全部重置</button>
+                </div>
+            </div>
+        `;
+    }
+
+    async function exportData() {
+        try {
+            const data = await apiGet('/api/export');
+            const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `hpti-backup-${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('已导出');
+        } catch(e) { showToast('导出失败', true); }
+    }
+
+    function importData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async e => {
+            try {
+                const data = JSON.parse(e.target.result);
+                if (!data.questions && !data.results) throw new Error('invalid');
+                if (!confirm(`确认导入？\n这将覆盖服务器上的当前数据。`)) return;
+                await apiPost('/api/import', data);
+                appData = await loadData();
+                renderData();
+                showToast('导入成功');
+            } catch(err) {
+                showToast('文件格式错误或导入失败', true);
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    async function changePwd() {
+        const p1 = document.getElementById('newPwd').value;
+        const p2 = document.getElementById('newPwd2').value;
+        if (!p1) { showToast('请输入密码', true); return; }
+        if (p1 !== p2) { showToast('两次密码不一致', true); return; }
+        try {
+            await apiPost('/api/password', { newPassword: p1 });
+            adminPwd = p1;
+            document.getElementById('newPwd').value = '';
+            document.getElementById('newPwd2').value = '';
+            showToast('密码已修改');
+        } catch(e) { showToast('修改失败', true); }
+    }
+
+    async function resetQuestions() {
+        if (!confirm('确认将题库重置为默认？所有自定义题目将丢失。')) return;
+        appData.questions = JSON.parse(JSON.stringify(DEFAULT_QUESTIONS));
+        await saveData();
+        showToast('题库已重置');
+    }
+
+    async function resetPersonalities() {
+        if (!confirm('确认将人格库重置为默认？所有自定义人格将丢失。')) return;
+        appData.personalities = JSON.parse(JSON.stringify(DEFAULT_PERSONALITIES));
+        await saveData();
+        showToast('人格库已重置');
+    }
+
+    async function resetAll() {
+        if (!confirm('⚠️ 确认全部重置？\n\n所有题目、人格、稀有度都将恢复为默认值，此操作不可恢复！')) return;
+        await resetData();
+        renderData();
+        showToast('全部重置完成');
+    }
+
+    // ==================== Modal ====================
+    function openModal(title, content) {
+        document.getElementById('modalTitle').textContent = title;
+        document.getElementById('modalBody').innerHTML = content;
+        document.getElementById('modalOverlay').classList.add('show');
+    }
+
+    function closeModal() {
+        document.getElementById('modalOverlay').classList.remove('show');
+    }
+
+    document.getElementById('modalOverlay').addEventListener('click', e => {
+        if (e.target.id === 'modalOverlay') closeModal();
+    });
+
+    // ==================== Toast ====================
+    let toastTimer = null;
+    function showToast(msg, isError) {
+        const toast = document.getElementById('toast');
+        toast.textContent = msg;
+        toast.style.background = isError ? '#c75c5c' : '#dba05a';
+        toast.style.color = isError ? '#fff' : '#1e1826';
+        toast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove('show'), 2000);
+    }
+
+    // ==================== Init ====================
+    // Show login screen
+    (function init() {
+        // Focus password input
+        document.getElementById('pwdInput').focus();
+    })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+# Render Blueprint - auto-deploys when pushed to connected GitHub repo
+services:
+  - type: web
+    name: hpti
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: echo "Zero-dependency Node.js server — no build needed"
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+    autoDeploy: true
