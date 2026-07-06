@@ -81,6 +81,14 @@ async function handleApi(request, env, pathname, method) {
             matchPercent: body.matchPercent || 0,
             rarity: body.rarity || '',
             timestamp: new Date().toISOString(),
+            // 详细答题数据
+            answers: body.answers || [],
+            scores: body.scores || {},
+            dimDetails: body.dimDetails || {},
+            bestDist: body.bestDist !== undefined ? body.bestDist : null,
+            duration: body.duration || 0,
+            deviceInfo: body.deviceInfo || {},
+            questionCount: body.questionCount || 0,
         };
         data.results.push(result);
         if (data.results.length > 50000) {
@@ -159,6 +167,21 @@ async function handleApi(request, env, pathname, method) {
         stats.avgMatch = results.length > 0
             ? Math.round(results.reduce((s, r) => s + (r.matchPercent || 0), 0) / results.length)
             : 0;
+        // 平均测试时长
+        const durations = results.filter(r => r.duration && r.duration > 0).map(r => r.duration);
+        stats.avgDuration = durations.length > 0
+            ? Math.round(durations.reduce((s, d) => s + d, 0) / durations.length)
+            : 0;
+        // 维度倾向统计
+        stats.dimTendency = {};
+        if (results.length > 0) {
+            const dimKeys = ['sex', 'social', 'emotion', 'action', 'think', 'adventure'];
+            dimKeys.forEach(dim => {
+                const firstLetters = results.map(r => (r.userCode || '')[dimKeys.indexOf(dim)]);
+                const firstCount = firstLetters.filter(l => l && l !== dimKeys[dim] && ['O','E','S','P','T','A'].includes(l)).length;
+                stats.dimTendency[dim] = { first: firstCount, second: results.length - firstCount };
+            });
+        }
         return jsonResponse(stats);
     }
 
