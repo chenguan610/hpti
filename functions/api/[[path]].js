@@ -22,7 +22,7 @@ async function getData(env) {
         } catch (e) { /* fall through */ }
     }
 
-    _cache = { password: 'admin', config: null, results: [] };
+    _cache = { password: 'admin', config: null, results: [], users: [] };
     return _cache;
 }
 
@@ -119,11 +119,18 @@ async function handleApi(request, env, pathname, method) {
     // ---- POST /api/login (public) ----
     if (method === 'POST' && pathname === '/api/login') {
         const body = await readBody(request);
+        // Check admin password first
         if (body.password === data.password) {
-            return jsonResponse({ success: true });
-        } else {
-            return jsonResponse({ success: false, error: '密码错误' }, 401);
+            return jsonResponse({ success: true, role: 'admin' });
         }
+        // Check user accounts
+        if (body.username && data.users) {
+            const user = data.users.find(u => u.username === body.username && u.password === body.password);
+            if (user) {
+                return jsonResponse({ success: true, role: 'user', username: user.username });
+            }
+        }
+        return jsonResponse({ success: false, error: '密码错误' }, 401);
     }
 
     // ---- GET /api/results (auth) ----
@@ -199,6 +206,57 @@ async function handleApi(request, env, pathname, method) {
         const body = await readBody(request);
         if (!body.newPassword) return jsonResponse({ error: '请输入新密码' }, 400);
         data.password = body.newPassword;
+        await saveData(data, env);
+        return jsonResponse({ success: true });
+    }
+
+    // ---- GET /api/users (auth) ----
+    if (method === 'GET' && pathname === '/api/users') {
+        if (!checkAuth(request, data)) return jsonResponse({ error: '未授权' }, 401);
+        const users = (data.users || []).map(u => ({
+            username: u.username,
+            role: u.role || 'user',
+            createdAt: u.createdAt || '',
+        }));
+        return jsonResponse({ users });
+    }
+
+    // ---- POST /api/users (auth) ----
+    if (method === 'POST' && pathname === '/api/users') {
+        if (!checkAuth(request, data)) return jsonResponse({ error: '未授权' }, 401);
+        const body = await readBody(request);
+        if (!body.username || !body.password) {
+            return jsonResponse({ error: '用户名和密码不能为空' }, 400);
+        }
+        if (body.username.length < 2 || body.username.length > 30) {
+            return jsonResponse({ error: '用户名长度需在 2-30 字符之间' }, 400);
+        }
+        if (body.password.length < 4) {
+            return jsonResponse({ error: '密码长度至少 4 位' }, 400);
+        }
+        if (!data.users) data.users = [];
+        if (data.users.find(u => u.username === body.username)) {
+            return jsonResponse({ error: '用户名已存在' }, 409);
+        }
+        data.users.push({
+            username: body.username,
+            password: body.password,
+            role: 'user',
+            createdAt: new Date().toISOString(),
+        });
+        await saveData(data, env);
+        return jsonResponse({ success: true, username: body.username });
+    }
+
+    // ---- DELETE /api/users (auth) ----
+    if (method === 'DELETE' && pathname === '/api/users') {
+        if (!checkAuth(request, data)) return jsonResponse({ error: '未授权' }, 401);
+        const body = await readBody(request);
+        if (!body.username) return jsonResponse({ error: '请指定用户名' }, 400);
+        if (!data.users) data.users = [];
+        const idx = data.users.findIndex(u => u.username === body.username);
+        if (idx === -1) return jsonResponse({ error: '用户不存在' }, 404);
+        data.users.splice(idx, 1);
         await saveData(data, env);
         return jsonResponse({ success: true });
     }

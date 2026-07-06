@@ -310,6 +310,7 @@
             <button class="tab-btn" data-tab="personalities" onclick="switchTab('personalities')">🎭 人格库</button>
             <button class="tab-btn" data-tab="rarity" onclick="switchTab('rarity')">💎 稀有度配置</button>
             <button class="tab-btn" data-tab="records" onclick="switchTab('records')">📋 测试记录</button>
+            <button class="tab-btn" data-tab="users" onclick="switchTab('users')">👥 用户管理</button>
             <button class="tab-btn" data-tab="data" onclick="switchTab('data')">💾 数据管理</button>
         </div>
 
@@ -318,6 +319,7 @@
         <div id="tab-personalities" class="tab-content" style="display:none;"></div>
         <div id="tab-rarity" class="tab-content" style="display:none;"></div>
         <div id="tab-records" class="tab-content" style="display:none;"></div>
+        <div id="tab-users" class="tab-content" style="display:none;"></div>
         <div id="tab-data" class="tab-content" style="display:none;"></div>
     </div>
 
@@ -362,11 +364,16 @@
         if (resp.status === 401) throw new Error('未授权');
         return resp.json();
     }
-    async function apiDelete(path) {
-        const resp = await fetch(API_BASE + path, {
+    async function apiDelete(path, body) {
+        const opts = {
             method: 'DELETE',
             headers: { 'X-Admin-Password': adminPwd }
-        });
+        };
+        if (body) {
+            opts.headers['Content-Type'] = 'application/json';
+            opts.body = JSON.stringify(body);
+        }
+        const resp = await fetch(API_BASE + path, opts);
         if (resp.status === 401) throw new Error('未授权');
         return resp.json();
     }
@@ -562,6 +569,7 @@
         if (tab === 'personalities') renderPersonalities();
         if (tab === 'rarity') renderRarity();
         if (tab === 'records') renderRecords();
+        if (tab === 'users') renderUsers();
         if (tab === 'data') renderData();
     }
 
@@ -1191,6 +1199,101 @@
             renderRecords();
             showToast('记录已清空');
         } catch(e) { showToast('清空失败', true); }
+    }
+
+    // ==================== User Management ====================
+    async function renderUsers() {
+        document.getElementById('tab-users').innerHTML = '<div class="card"><div class="empty-state"><span class="emoji">⏳</span>加载中...</div></div>';
+        let users = [];
+        try {
+            const json = await apiGet('/api/users');
+            users = json.users || [];
+        } catch(e) {
+            document.getElementById('tab-users').innerHTML = '<div class="card"><div class="empty-state"><span class="emoji">⚠️</span>加载失败，请检查网络连接</div></div>';
+            return;
+        }
+        document.getElementById('tab-users').innerHTML = `
+            <div class="card">
+                <div class="card-title">➕ 新增用户</div>
+                <div class="form-hint" style="margin-bottom:14px;">创建新用户账号，用户可使用自己的用户名和密码登录查看测试数据。</div>
+                <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+                    <div class="form-group" style="flex:1;min-width:160px;">
+                        <label class="form-label">用户名</label>
+                        <input class="form-input" id="newUsername" type="text" placeholder="2-30 个字符">
+                    </div>
+                    <div class="form-group" style="flex:1;min-width:160px;">
+                        <label class="form-label">密码</label>
+                        <input class="form-input" id="newUserPwd" type="password" placeholder="至少 4 位">
+                    </div>
+                    <button class="btn btn-primary btn-sm" style="height:42px;" onclick="addUser()">创建用户</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">
+                    <span>👥 用户列表（共 ${users.length} 人）</span>
+                </div>
+                ${users.length === 0 ? `
+                    <div class="empty-state">
+                        <span class="emoji">👤</span>
+                        暂无用户账号，请先创建
+                    </div>
+                ` : `
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>用户名</th><th>角色</th><th>创建时间</th><th>操作</th></tr>
+                            </thead>
+                            <tbody>
+                                ${users.map(u => `
+                                    <tr>
+                                        <td style="font-weight:600;color:#f1e5ff;">${escHtml(u.username)}</td>
+                                        <td><span class="badge badge-${u.role === 'admin' ? 'legendary' : 'common'}">${u.role === 'admin' ? '管理员' : '普通用户'}</span></td>
+                                        <td style="color:#6e5c78;font-size:12px;">${u.createdAt ? new Date(u.createdAt).toLocaleString('zh-CN') : '-'}</td>
+                                        <td>
+                                            <button class="btn btn-danger btn-sm" onclick="deleteUser('${escHtml(u.username)}')">删除</button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `}
+                <div class="form-hint" style="margin-top:12px;">💡 用户可使用自己的用户名 + 密码在管理后台登录。管理员密码同样可用于登录。</div>
+            </div>
+        `;
+    }
+
+    function escHtml(str) {
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    async function addUser() {
+        const username = document.getElementById('newUsername').value.trim();
+        const password = document.getElementById('newUserPwd').value;
+        if (!username) { showToast('请输入用户名', true); return; }
+        if (username.length < 2 || username.length > 30) { showToast('用户名长度需在 2-30 字符之间', true); return; }
+        if (password.length < 4) { showToast('密码至少 4 位', true); return; }
+        try {
+            await apiPost('/api/users', { username, password });
+            document.getElementById('newUsername').value = '';
+            document.getElementById('newUserPwd').value = '';
+            showToast('用户 ' + username + ' 创建成功');
+            renderUsers();
+        } catch(e) {
+            showToast('创建失败：' + (e.message || '未知错误'), true);
+        }
+    }
+
+    async function deleteUser(username) {
+        if (!confirm('确认删除用户「' + username + '」？此操作不可恢复。')) return;
+        try {
+            await apiDelete('/api/users', { username });
+            showToast('用户已删除');
+            renderUsers();
+        } catch(e) {
+            showToast('删除失败：' + (e.message || '未知错误'), true);
+        }
     }
 
     // ==================== Data Management ====================
