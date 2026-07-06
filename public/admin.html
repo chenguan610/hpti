@@ -268,6 +268,30 @@
         }
         .danger-zone h3 { color: #c75c5c; font-size: 15px; margin-bottom: 10px; }
 
+        /* ===== Permission Management ===== */
+        .perm-grid {
+            display: flex; flex-wrap: wrap; gap: 8px;
+        }
+        .perm-chk-label {
+            display: flex; flex-direction: column; gap: 2px;
+            padding: 10px 14px; border-radius: 12px;
+            background: rgba(60,45,75,0.6); border: 1.5px solid rgba(190,150,130,0.3);
+            cursor: pointer; transition: all .2s;
+            flex: 1; min-width: 140px; user-select: none;
+        }
+        .perm-chk-label:hover { border-color: #dba05a; background: rgba(60,45,75,0.9); }
+        .perm-chk-label input[type="checkbox"] {
+            width: 16px; height: 16px; accent-color: #dba05a;
+            cursor: pointer; margin-bottom: 4px;
+        }
+        .perm-chk-text { font-size: 14px; font-weight: 600; color: #e3d7f0; }
+        .perm-chk-desc { font-size: 11px; color: #9b8eaa; line-height: 1.3; }
+        .perm-tag {
+            display: inline-block; padding: 2px 8px; border-radius: 12px;
+            background: rgba(219,160,90,0.2); color: #f5d7b0;
+            font-size: 11px; font-weight: 500; margin: 1px 3px;
+        }
+
         @media (max-width: 600px) {
             .form-row { flex-direction: column; }
             .stats-grid { grid-template-columns: 1fr 1fr; }
@@ -490,6 +514,53 @@
     let qFilter = 'all';
     let pFilter = 'all';
     let pSearch = '';
+    let userPermissions = {}; // 当前登录用户的权限表
+    let userRole = '';        // 当前登录用户的角色
+    const PERM_DEFS = {
+        view:            { label: '查看数据',      desc: '查看仪表盘和测试记录' },
+        edit_questions:  { label: '编辑题库',      desc: '新增/修改/删除测试题目' },
+        edit_personalities:{ label: '编辑人格库',  desc: '新增/修改/删除人格类型' },
+        edit_rarity:     { label: '编辑稀有度',    desc: '修改稀有度分级配置' },
+        delete_records:  { label: '删除记录',      desc: '清空所有测试记录' },
+        manage_data:     { label: '数据管理',      desc: '导入导出数据、修改管理员密码' },
+        manage_users:    { label: '用户管理',      desc: '新增/修改/删除用户账号及权限' },
+    };
+
+    function hasPerm(key) {
+        if (userRole === 'admin') return true;
+        return userPermissions[key] === true;
+    }
+
+    function updateTabVisibility() {
+        const tabs = {
+            dashboard:        document.querySelector('[data-tab="dashboard"]'),
+            questions:        document.querySelector('[data-tab="questions"]'),
+            personalities:    document.querySelector('[data-tab="personalities"]'),
+            rarity:           document.querySelector('[data-tab="rarity"]'),
+            records:          document.querySelector('[data-tab="records"]'),
+            users:            document.querySelector('[data-tab="users"]'),
+            data:             document.querySelector('[data-tab="data"]'),
+        };
+        const permMap = {
+            dashboard: 'view', questions: 'edit_questions',
+            personalities: 'edit_personalities', rarity: 'edit_rarity',
+            records: 'view', users: 'manage_users', data: 'manage_data',
+        };
+        for (const [tab, el] of Object.entries(tabs)) {
+            if (!el) continue;
+            el.style.display = hasPerm(permMap[tab]) ? '' : 'none';
+        }
+        // If current tab is hidden, switch to first visible tab
+        const currentEl = document.querySelector(`[data-tab="${currentTab}"]`);
+        if (currentEl && currentEl.style.display === 'none') {
+            for (const [tab, el] of Object.entries(tabs)) {
+                if (el.style.display !== 'none') {
+                    switchTab(tab);
+                    break;
+                }
+            }
+        }
+    }
 
     // ==================== Storage (Backend API) ====================
     async function loadData() {
@@ -538,22 +609,37 @@
 
     // ==================== Login ====================
     async function doLogin() {
-        const user = document.getElementById('userInput').value.trim();
+        const uname = document.getElementById('userInput').value.trim();
         const pwd = document.getElementById('pwdInput').value;
         if (!pwd) { showToast('请输入密码', true); return; }
         try {
-            const body = user ? { username: user, password: pwd } : { password: pwd };
+            const body = uname ? { username: uname, password: pwd } : { password: pwd };
             const json = await apiPost('/api/login', body);
             if (json.success) {
                 adminPwd = pwd;
-                currentUser = json.role === 'user' ? (json.username || user) : '';
+                currentUser = json.role !== 'admin' ? (json.username || uname) : '';
+                userRole = json.role || 'viewer';
+                userPermissions = json.permissions || {};
                 document.getElementById('loginWrap').style.display = 'none';
                 document.getElementById('adminMain').style.display = 'block';
                 appData = await loadData();
-                switchTab('dashboard');
-                showToast(currentUser ? `欢迎，${currentUser}` : '登录成功');
+                updateTabVisibility();
+                // 根据权限决定默认页：无 view 权限则找第一个可用 tab
+                if (hasPerm('view')) {
+                    switchTab('dashboard');
+                } else if (hasPerm('edit_questions')) {
+                    switchTab('questions');
+                } else if (hasPerm('edit_personalities')) {
+                    switchTab('personalities');
+                } else if (hasPerm('manage_users')) {
+                    switchTab('users');
+                } else if (hasPerm('manage_data')) {
+                    switchTab('data');
+                }
+                const welcomeName = currentUser || (userRole === 'admin' ? '管理员' : '用户');
+                showToast(`欢迎，${welcomeName}`);
             } else {
-                showToast(json.error || '密码错误', true);
+                showToast(json.error || '用户名或密码错误', true);
             }
         } catch(e) {
             showToast('无法连接服务器', true);
@@ -562,7 +648,9 @@
 
     function doLogout() {
         adminPwd = '';
-        userPwd = '';
+        currentUser = '';
+        userRole = '';
+        userPermissions = {};
         document.getElementById('loginWrap').style.display = 'flex';
         document.getElementById('adminMain').style.display = 'none';
         document.getElementById('pwdInput').value = '';
@@ -572,6 +660,10 @@
 
     // ==================== Tab Switching ====================
     function switchTab(tab) {
+        // 权限检查
+        const permMap2 = { dashboard:'view', questions:'edit_questions', personalities:'edit_personalities',
+            rarity:'edit_rarity', records:'view', users:'manage_users', data:'manage_data' };
+        if (permMap2[tab] && !hasPerm(permMap2[tab])) return;
         currentTab = tab;
         document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
         document.getElementById('tab-' + tab).style.display = 'block';
@@ -1019,7 +1111,7 @@
             <div class="card">
                 <div class="card-title">
                     <span>📋 测试记录（共 ${results.length} 条${filtered.length !== results.length ? '，筛选后 ' + filtered.length + ' 条' : ''}）</span>
-                    ${results.length > 0 ? `<button class="btn btn-danger btn-sm" onclick="clearRecords()">清空记录</button>` : ''}
+                    ${results.length > 0 && hasPerm('delete_records') ? `<button class="btn btn-danger btn-sm" onclick="clearRecords()">清空记录</button>` : ''}
                 </div>
                 <div class="filter-bar" style="margin-bottom:16px;">
                     <input type="text" placeholder="筛选代号（如 OES）..." value="${recordFilter.code}"
@@ -1206,6 +1298,7 @@
     }
 
     async function clearRecords() {
+        if (!hasPerm('delete_records')) { showToast('无权限：需要删除记录权限', true); return; }
         if (!confirm('确认清空所有测试记录？此操作不可恢复。')) return;
         try {
             await apiDelete('/api/results');
@@ -1225,21 +1318,47 @@
             document.getElementById('tab-users').innerHTML = '<div class="card"><div class="empty-state"><span class="emoji">⚠️</span>加载失败，请检查网络连接</div></div>';
             return;
         }
+
+        const permNames = ['view','edit_questions','edit_personalities','edit_rarity','delete_records','manage_data','manage_users'];
+
+        // 新增用户表单
+        let permCheckboxesHTML = '';
+        permNames.forEach(k => {
+            permCheckboxesHTML += `
+                <label class="perm-chk-label" title="${escHtml(PERM_DEFS[k].desc)}">
+                    <input type="checkbox" id="newPerm_${k}" onchange="updateNewUserRoleLabel()">
+                    <span class="perm-chk-text">${PERM_DEFS[k].label}</span>
+                </label>`;
+        });
+
         document.getElementById('tab-users').innerHTML = `
             <div class="card">
                 <div class="card-title">➕ 新增用户</div>
-                <div class="form-hint" style="margin-bottom:14px;">创建新用户账号，用户可使用自己的用户名和密码登录查看测试数据。</div>
-                <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
-                    <div class="form-group" style="flex:1;min-width:160px;">
+                <div class="form-hint" style="margin-bottom:14px;">创建新用户并为其设置独立权限。可快速选择预设角色，也可逐项勾选自定义权限。</div>
+                <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;">
+                    <div class="form-group" style="flex:1;min-width:140px;">
                         <label class="form-label">用户名</label>
                         <input class="form-input" id="newUsername" type="text" placeholder="2-30 个字符">
                     </div>
-                    <div class="form-group" style="flex:1;min-width:160px;">
+                    <div class="form-group" style="flex:1;min-width:140px;">
                         <label class="form-label">密码</label>
                         <input class="form-input" id="newUserPwd" type="password" placeholder="至少 4 位">
                     </div>
+                    <div class="form-group" style="min-width:120px;">
+                        <label class="form-label">预设角色</label>
+                        <select class="form-input" id="newUserRole" onchange="applyRolePreset()" style="padding:10px 12px;">
+                            <option value="viewer">查看者</option>
+                            <option value="editor">编辑者</option>
+                            <option value="manager">管理者</option>
+                            <option value="custom">自定义</option>
+                        </select>
+                    </div>
                     <button class="btn btn-primary btn-sm" style="height:42px;" onclick="addUser()">创建用户</button>
                 </div>
+                <div class="perm-grid" id="newUserPerms">
+                    ${permCheckboxesHTML}
+                </div>
+                <div class="form-hint" style="margin-top:10px;" id="newUserRoleHint">💡 查看者：仅可查看数据概览和测试记录</div>
             </div>
 
             <div class="card">
@@ -1255,30 +1374,69 @@
                     <div class="table-wrap">
                         <table class="data-table">
                             <thead>
-                                <tr><th>用户名</th><th>角色</th><th>创建时间</th><th>操作</th></tr>
+                                <tr><th>用户名</th><th>角色</th><th>权限摘要</th><th>创建时间</th><th>操作</th></tr>
                             </thead>
                             <tbody>
-                                ${users.map(u => `
+                                ${users.map(u => {
+                                    const activePerms = permNames.filter(k => u.permissions && u.permissions[k]);
+                                    const permSummary = activePerms.length === 0 ? '<span style="color:#9b8eaa;">无权限</span>'
+                                        : activePerms.length === permNames.length ? '<span style="color:#7ec8a0;">全部权限</span>'
+                                        : activePerms.map(k => `<span class="perm-tag">${PERM_DEFS[k].label}</span>`).join('');
+                                    return `
                                     <tr>
                                         <td style="font-weight:600;color:#f1e5ff;">${escHtml(u.username)}</td>
-                                        <td><span class="badge badge-${u.role === 'admin' ? 'legendary' : 'common'}">${u.role === 'admin' ? '管理员' : '普通用户'}</span></td>
+                                        <td><span class="badge badge-${u.role === 'admin' ? 'legendary' : u.role === 'manager' ? 'epic' : u.role === 'editor' ? 'rare' : 'common'}">${u.role === 'viewer' ? '查看者' : u.role === 'editor' ? '编辑者' : u.role === 'manager' ? '管理者' : u.role}</span></td>
+                                        <td style="max-width:260px;line-height:1.8;">${permSummary}</td>
                                         <td style="color:#6e5c78;font-size:12px;">${u.createdAt ? new Date(u.createdAt).toLocaleString('zh-CN') : '-'}</td>
-                                        <td>
+                                        <td style="white-space:nowrap;">
+                                            <button class="btn btn-outline btn-sm" onclick="editUserPerms('${escHtml(u.username)}', ${escHtml(JSON.stringify(u.permissions || {}))}, '${escHtml(u.role || 'viewer')}')">✏️ 权限</button>
                                             <button class="btn btn-danger btn-sm" onclick="deleteUser('${escHtml(u.username)}')">删除</button>
                                         </td>
-                                    </tr>
-                                `).join('')}
+                                    </tr>`;
+                                }).join('')}
                             </tbody>
                         </table>
                     </div>
                 `}
-                <div class="form-hint" style="margin-top:12px;">💡 用户可使用自己的用户名 + 密码在管理后台登录。管理员密码同样可用于登录。</div>
+                <div class="form-hint" style="margin-top:12px;">💡 每个用户的权限是独立的，可以随时修改。管理员拥有全部权限，不受限制。</div>
             </div>
         `;
     }
 
-    function escHtml(str) {
-        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    // 权限说明
+    const ROLE_HINTS = {
+        viewer: '💡 查看者：仅可查看数据概览和测试记录，不能做任何修改',
+        editor: '💡 编辑者：可查看数据 + 编辑题库/人格库/稀有度配置，无用户管理和数据管理权限',
+        manager: '💡 管理者：全部权限（查看 + 编辑 + 管理用户 + 数据管理），但不能删除其他管理者',
+        custom: '💡 自定义：请逐项勾选需要授予的权限',
+    };
+
+    function updateNewUserRoleLabel() {
+        const roleSelect = document.getElementById('newUserRole');
+        // If user manually changes checkboxes, switch role to custom
+        if (roleSelect) roleSelect.value = 'custom';
+        const hint = document.getElementById('newUserRoleHint');
+        if (hint) hint.textContent = ROLE_HINTS.custom;
+    }
+
+    function applyRolePreset() {
+        const role = document.getElementById('newUserRole').value;
+        const hint = document.getElementById('newUserRoleHint');
+        const permNames = ['view','edit_questions','edit_personalities','edit_rarity','delete_records','manage_data','manage_users'];
+
+        const presets = {
+            viewer:    ['view'],
+            editor:    ['view','edit_questions','edit_personalities','edit_rarity'],
+            manager:   ['view','edit_questions','edit_personalities','edit_rarity','delete_records','manage_data','manage_users'],
+        };
+
+        if (presets[role]) {
+            permNames.forEach(k => {
+                const cb = document.getElementById('newPerm_' + k);
+                if (cb) cb.checked = presets[role].includes(k);
+            });
+        }
+        if (hint) hint.textContent = ROLE_HINTS[role] || '';
     }
 
     async function addUser() {
@@ -1287,10 +1445,22 @@
         if (!username) { showToast('请输入用户名', true); return; }
         if (username.length < 2 || username.length > 30) { showToast('用户名长度需在 2-30 字符之间', true); return; }
         if (password.length < 4) { showToast('密码至少 4 位', true); return; }
+
+        const permNames = ['view','edit_questions','edit_personalities','edit_rarity','delete_records','manage_data','manage_users'];
+        const permissions = {};
+        permNames.forEach(k => {
+            const cb = document.getElementById('newPerm_' + k);
+            permissions[k] = cb ? cb.checked : false;
+        });
+
+        const role = document.getElementById('newUserRole').value;
         try {
-            await apiPost('/api/users', { username, password });
+            await apiPost('/api/users', { username, password, permissions, role });
             document.getElementById('newUsername').value = '';
             document.getElementById('newUserPwd').value = '';
+            // Reset to viewer preset
+            document.getElementById('newUserRole').value = 'viewer';
+            applyRolePreset();
             showToast('用户 ' + username + ' 创建成功');
             renderUsers();
         } catch(e) {
@@ -1307,6 +1477,75 @@
         } catch(e) {
             showToast('删除失败：' + (e.message || '未知错误'), true);
         }
+    }
+
+    // 编辑用户权限弹窗
+    function editUserPerms(username, perms, role) {
+        const permNames = ['view','edit_questions','edit_personalities','edit_rarity','delete_records','manage_data','manage_users'];
+        let checkboxesHTML = '';
+        permNames.forEach(k => {
+            const chk = perms && perms[k] ? 'checked' : '';
+            checkboxesHTML += `
+                <label class="perm-chk-label" title="${escHtml(PERM_DEFS[k].desc)}" style="flex-basis: calc(50% - 8px);">
+                    <input type="checkbox" id="editPerm_${k}" ${chk}>
+                    <span class="perm-chk-text">${PERM_DEFS[k].label}</span>
+                    <span class="perm-chk-desc">${PERM_DEFS[k].desc}</span>
+                </label>`;
+        });
+
+        document.getElementById('modalTitle').textContent = '✏️ 编辑用户权限 - ' + username;
+        document.getElementById('modalBody').innerHTML = `
+            <div style="margin-bottom:14px;">
+                <label class="form-label">用户密码（留空不修改）</label>
+                <input class="form-input" id="editUserPwd" type="password" placeholder="输入新密码，留空则保持原密码">
+            </div>
+            <label class="form-label">权限设置</label>
+            <div class="perm-grid" style="margin-bottom:10px;">
+                ${checkboxesHTML}
+            </div>
+            <div style="display:flex;gap:10px;margin-bottom:8px;">
+                <button class="btn btn-outline btn-sm" onclick="editPermSelectAll(true)">全选</button>
+                <button class="btn btn-outline btn-sm" onclick="editPermSelectAll(false)">取消全选</button>
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end;">
+                <button class="btn btn-outline btn-sm" onclick="closeModal()">取消</button>
+                <button class="btn btn-primary btn-sm" onclick="saveUserPerms('${escHtml(username)}')">保存修改</button>
+            </div>
+        `;
+        document.getElementById('modalOverlay').classList.add('show');
+    }
+
+    function editPermSelectAll(val) {
+        const permNames = ['view','edit_questions','edit_personalities','edit_rarity','delete_records','manage_data','manage_users'];
+        permNames.forEach(k => {
+            const cb = document.getElementById('editPerm_' + k);
+            if (cb) cb.checked = val;
+        });
+    }
+
+    async function saveUserPerms(username) {
+        const permNames = ['view','edit_questions','edit_personalities','edit_rarity','delete_records','manage_data','manage_users'];
+        const permissions = {};
+        permNames.forEach(k => {
+            const cb = document.getElementById('editPerm_' + k);
+            permissions[k] = cb ? cb.checked : false;
+        });
+        const body = { username, permissions };
+        const pwd = document.getElementById('editUserPwd').value;
+        if (pwd && pwd.length >= 4) body.password = pwd;
+
+        try {
+            await apiPut('/api/users', body);
+            closeModal();
+            showToast('用户 ' + username + ' 权限已更新');
+            renderUsers();
+        } catch(e) {
+            showToast('保存失败：' + (e.message || '未知错误'), true);
+        }
+    }
+
+    function escHtml(str) {
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     }
 
     // ==================== Data Management ====================

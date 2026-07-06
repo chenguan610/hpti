@@ -7,6 +7,33 @@
 // In-memory cache (persists across warm invocations within same isolate)
 let _cache = null;
 
+// ==================== Permission System ====================
+const PERMISSIONS = {
+    view:           { label: '查看数据',      desc: '查看仪表盘和测试记录',             defaultFor: ['viewer','editor','manager'] },
+    edit_questions: { label: '编辑题库',      desc: '新增/修改/删除测试题目',           defaultFor: ['editor','manager'] },
+    edit_personalities:{ label: '编辑人格库', desc: '新增/修改/删除人格类型',            defaultFor: ['editor','manager'] },
+    edit_rarity:    { label: '编辑稀有度',    desc: '修改稀有度分级配置',                defaultFor: ['editor','manager'] },
+    delete_records: { label: '删除记录',      desc: '清空测试记录',                      defaultFor: ['manager'] },
+    manage_data:    { label: '数据管理',      desc: '导入导出数据、修改管理员密码',       defaultFor: ['manager'] },
+    manage_users:   { label: '用户管理',      desc: '新增/修改/删除用户账号及权限',       defaultFor: ['manager'] },
+};
+
+const ALL_PERM_KEYS = Object.keys(PERMISSIONS);
+
+// Build default permission sets for predefined roles
+function getRoleDefaults(role) {
+    const perms = {};
+    ALL_PERM_KEYS.forEach(k => { perms[k] = false; });
+    if (role === 'viewer') {
+        perms.view = true;
+    } else if (role === 'editor') {
+        ALL_PERM_KEYS.forEach(k => { perms[k] = PERMISSIONS[k].defaultFor.includes('editor'); });
+    } else if (role === 'manager') {
+        ALL_PERM_KEYS.forEach(k => { perms[k] = true; });
+    }
+    return perms;
+}
+
 // ==================== Data Layer ====================
 async function getData(env) {
     if (_cache) return _cache;
@@ -44,7 +71,7 @@ function jsonResponse(data, status = 200) {
             'Content-Type': 'application/json; charset=utf-8',
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Password',
+            'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Password, X-Username',
         },
     });
 }
@@ -57,17 +84,36 @@ async function readBody(request) {
     }
 }
 
-function checkAuth(request, data) {
+// Returns { username, role, permissions } or null if not authenticated
+function getAuthUser(request, data) {
     const pwd = request.headers.get('x-admin-password');
-    if (!pwd) return false;
-    // Check admin password
-    if (pwd === data.password) return true;
-    // Check user accounts
+    if (!pwd) return null;
+
+    // Admin login - full permissions
+    if (pwd === data.password) {
+        const fullPerms = {};
+        ALL_PERM_KEYS.forEach(k => { fullPerms[k] = true; });
+        return { username: 'admin', role: 'admin', permissions: fullPerms };
+    }
+
+    // User account login
     if (data.users && data.users.length > 0) {
         const username = request.headers.get('x-username') || '';
-        return data.users.some(u => u.username === username && u.password === pwd);
+        const user = data.users.find(u => u.username === username && u.password === pwd);
+        if (user) {
+            // Ensure permissions object exists (migration from old format)
+            const perms = user.permissions || getRoleDefaults(user.role || 'viewer');
+            return { username: user.username, role: user.role || 'viewer', permissions: perms };
+        }
     }
-    return false;
+    return null;
+}
+
+// Check if user has a specific permission (or is admin)
+function checkPerm(authUser, permission) {
+    if (!authUser) return false;
+    if (authUser.role === 'admin') return true;
+    return authUser.permissions && authUser.permissions[permission] === true;
 }
 
 // ==================== API Handlers ====================
@@ -111,9 +157,12 @@ async function handleApi(request, env, pathname, method) {
         return jsonResponse({ config: data.config });
     }
 
-    // ---- PUT /api/config (auth) ----
+    // ---- PUT /api/config (auth: edit_questions or edit_personalities or edit_rarity) ----
     if (method === 'PUT' && pathname === '/api/config') {
-        if (!checkAuth(request, data)) return jsonResponse({ error: '未授权' }, 401);
+        const user = getAuthUser(request, data);
+        if (!checkPerm(user, 'edit_questions') && !checkPerm(user, 'edit_personalities') && !checkPerm(user, 'edit_rarity')) {
+            return jsonResponse({ error: '未授权：需要编辑权限' }, 401);
+        }
         const body = await readBody(request);
         data.config = {
             questions: body.questions || [],
@@ -129,28 +178,33 @@ async function handleApi(request, env, pathname, method) {
         const body = await readBody(request);
         // Check admin password first
         if (body.password === data.password) {
-            return jsonResponse({ success: true, role: 'admin' });
+            const fullPerms = {};
+            ALL_PERM_KEYS.forEach(k => { fullPerms[k] = true; });
+            return jsonResponse({ success: true, role: 'admin', permissions: fullPerms });
         }
         // Check user accounts
         if (body.username && data.users) {
             const user = data.users.find(u => u.username === body.username && u.password === body.password);
             if (user) {
-                return jsonResponse({ success: true, role: 'user', username: user.username });
+                const perms = user.permissions || getRoleDefaults(user.role || 'viewer');
+                return jsonResponse({ success: true, role: user.role || 'viewer', username: user.username, permissions: perms });
             }
         }
-        return jsonResponse({ success: false, error: '密码错误' }, 401);
+        return jsonResponse({ success: false, error: '用户名或密码错误' }, 401);
     }
 
-    // ---- GET /api/results (auth) ----
+    // ---- GET /api/results (auth: view) ----
     if (method === 'GET' && pathname === '/api/results') {
-        if (!checkAuth(request, data)) return jsonResponse({ error: '未授权' }, 401);
+        const user = getAuthUser(request, data);
+        if (!checkPerm(user, 'view')) return jsonResponse({ error: '未授权：需要查看权限' }, 401);
         const results = data.results.slice().reverse();
         return jsonResponse({ results, total: results.length });
     }
 
-    // ---- GET /api/stats (auth) ----
+    // ---- GET /api/stats (auth: view) ----
     if (method === 'GET' && pathname === '/api/stats') {
-        if (!checkAuth(request, data)) return jsonResponse({ error: '未授权' }, 401);
+        const user = getAuthUser(request, data);
+        if (!checkPerm(user, 'view')) return jsonResponse({ error: '未授权：需要查看权限' }, 401);
         const results = data.results;
         const stats = {
             total: results.length,
@@ -182,35 +236,35 @@ async function handleApi(request, env, pathname, method) {
         stats.avgMatch = results.length > 0
             ? Math.round(results.reduce((s, r) => s + (r.matchPercent || 0), 0) / results.length)
             : 0;
-        // 平均测试时长
         const durations = results.filter(r => r.duration && r.duration > 0).map(r => r.duration);
         stats.avgDuration = durations.length > 0
             ? Math.round(durations.reduce((s, d) => s + d, 0) / durations.length)
             : 0;
-        // 维度倾向统计
         stats.dimTendency = {};
         if (results.length > 0) {
-            const dimKeys = ['sex', 'social', 'emotion', 'action', 'think', 'adventure'];
-            dimKeys.forEach(dim => {
-                const firstLetters = results.map(r => (r.userCode || '')[dimKeys.indexOf(dim)]);
-                const firstCount = firstLetters.filter(l => l && l !== dimKeys[dim] && ['O','E','S','P','T','A'].includes(l)).length;
+            const dimKeys2 = ['sex', 'social', 'emotion', 'action', 'think', 'adventure'];
+            dimKeys2.forEach(dim => {
+                const firstLetters = results.map(r => (r.userCode || '')[dimKeys2.indexOf(dim)]);
+                const firstCount = firstLetters.filter(l => l && l !== dimKeys2[dim] && ['O','E','S','P','T','A'].includes(l)).length;
                 stats.dimTendency[dim] = { first: firstCount, second: results.length - firstCount };
             });
         }
         return jsonResponse(stats);
     }
 
-    // ---- DELETE /api/results (auth) ----
+    // ---- DELETE /api/results (auth: delete_records) ----
     if (method === 'DELETE' && pathname === '/api/results') {
-        if (!checkAuth(request, data)) return jsonResponse({ error: '未授权' }, 401);
+        const user = getAuthUser(request, data);
+        if (!checkPerm(user, 'delete_records')) return jsonResponse({ error: '未授权：需要删除记录权限' }, 401);
         data.results = [];
         await saveData(data, env);
         return jsonResponse({ success: true });
     }
 
-    // ---- POST /api/password (auth) ----
+    // ---- POST /api/password (auth: manage_data) ----
     if (method === 'POST' && pathname === '/api/password') {
-        if (!checkAuth(request, data)) return jsonResponse({ error: '未授权' }, 401);
+        const user = getAuthUser(request, data);
+        if (!checkPerm(user, 'manage_data')) return jsonResponse({ error: '未授权：需要数据管理权限' }, 401);
         const body = await readBody(request);
         if (!body.newPassword) return jsonResponse({ error: '请输入新密码' }, 400);
         data.password = body.newPassword;
@@ -218,20 +272,23 @@ async function handleApi(request, env, pathname, method) {
         return jsonResponse({ success: true });
     }
 
-    // ---- GET /api/users (auth) ----
+    // ---- GET /api/users (auth: manage_users) ----
     if (method === 'GET' && pathname === '/api/users') {
-        if (!checkAuth(request, data)) return jsonResponse({ error: '未授权' }, 401);
+        const user = getAuthUser(request, data);
+        if (!checkPerm(user, 'manage_users')) return jsonResponse({ error: '未授权：需要用户管理权限' }, 401);
         const users = (data.users || []).map(u => ({
             username: u.username,
-            role: u.role || 'user',
+            role: u.role || 'viewer',
+            permissions: u.permissions || getRoleDefaults(u.role || 'viewer'),
             createdAt: u.createdAt || '',
         }));
         return jsonResponse({ users });
     }
 
-    // ---- POST /api/users (auth) ----
+    // ---- POST /api/users (auth: manage_users) ----
     if (method === 'POST' && pathname === '/api/users') {
-        if (!checkAuth(request, data)) return jsonResponse({ error: '未授权' }, 401);
+        const user = getAuthUser(request, data);
+        if (!checkPerm(user, 'manage_users')) return jsonResponse({ error: '未授权：需要用户管理权限' }, 401);
         const body = await readBody(request);
         if (!body.username || !body.password) {
             return jsonResponse({ error: '用户名和密码不能为空' }, 400);
@@ -246,19 +303,61 @@ async function handleApi(request, env, pathname, method) {
         if (data.users.find(u => u.username === body.username)) {
             return jsonResponse({ error: '用户名已存在' }, 409);
         }
+        // Build permissions from request or use role defaults
+        let perms;
+        if (body.permissions && typeof body.permissions === 'object') {
+            perms = {};
+            ALL_PERM_KEYS.forEach(k => {
+                perms[k] = body.permissions[k] === true;
+            });
+        } else {
+            perms = getRoleDefaults(body.role || 'viewer');
+        }
         data.users.push({
             username: body.username,
             password: body.password,
-            role: 'user',
+            role: body.role || 'viewer',
+            permissions: perms,
             createdAt: new Date().toISOString(),
         });
         await saveData(data, env);
         return jsonResponse({ success: true, username: body.username });
     }
 
-    // ---- DELETE /api/users (auth) ----
+    // ---- PUT /api/users (auth: manage_users) ----
+    if (method === 'PUT' && pathname === '/api/users') {
+        const authUser = getAuthUser(request, data);
+        if (!checkPerm(authUser, 'manage_users')) return jsonResponse({ error: '未授权：需要用户管理权限' }, 401);
+        const body = await readBody(request);
+        if (!body.username) return jsonResponse({ error: '请指定用户名' }, 400);
+        if (!data.users) data.users = [];
+        const targetUser = data.users.find(u => u.username === body.username);
+        if (!targetUser) return jsonResponse({ error: '用户不存在' }, 404);
+        // Update password if provided
+        if (body.password && body.password.length >= 4) {
+            targetUser.password = body.password;
+        }
+        // Update permissions if provided
+        if (body.permissions && typeof body.permissions === 'object') {
+            if (!targetUser.permissions) targetUser.permissions = {};
+            ALL_PERM_KEYS.forEach(k => {
+                if (body.permissions.hasOwnProperty(k)) {
+                    targetUser.permissions[k] = body.permissions[k] === true;
+                }
+            });
+        }
+        // Update role label
+        if (body.role) {
+            targetUser.role = body.role;
+        }
+        await saveData(data, env);
+        return jsonResponse({ success: true, username: body.username });
+    }
+
+    // ---- DELETE /api/users (auth: manage_users) ----
     if (method === 'DELETE' && pathname === '/api/users') {
-        if (!checkAuth(request, data)) return jsonResponse({ error: '未授权' }, 401);
+        const authUser = getAuthUser(request, data);
+        if (!checkPerm(authUser, 'manage_users')) return jsonResponse({ error: '未授权：需要用户管理权限' }, 401);
         const body = await readBody(request);
         if (!body.username) return jsonResponse({ error: '请指定用户名' }, 400);
         if (!data.users) data.users = [];
@@ -269,21 +368,34 @@ async function handleApi(request, env, pathname, method) {
         return jsonResponse({ success: true });
     }
 
-    // ---- GET /api/export (auth) ----
+    // ---- GET /api/export (auth: manage_data) ----
     if (method === 'GET' && pathname === '/api/export') {
-        if (!checkAuth(request, data)) return jsonResponse({ error: '未授权' }, 401);
+        const user = getAuthUser(request, data);
+        if (!checkPerm(user, 'manage_data')) return jsonResponse({ error: '未授权：需要数据管理权限' }, 401);
         return jsonResponse(data);
     }
 
-    // ---- POST /api/import (auth) ----
+    // ---- POST /api/import (auth: manage_data) ----
     if (method === 'POST' && pathname === '/api/import') {
-        if (!checkAuth(request, data)) return jsonResponse({ error: '未授权' }, 401);
+        const user = getAuthUser(request, data);
+        if (!checkPerm(user, 'manage_data')) return jsonResponse({ error: '未授权：需要数据管理权限' }, 401);
         const body = await readBody(request);
         if (body.password) data.password = body.password;
         if (body.config) data.config = body.config;
         if (body.results) data.results = body.results;
         await saveData(data, env);
         return jsonResponse({ success: true });
+    }
+
+    // ---- GET /api/permissions (auth: manage_users) ----
+    if (method === 'GET' && pathname === '/api/permissions') {
+        const user = getAuthUser(request, data);
+        if (!checkPerm(user, 'manage_users')) return jsonResponse({ error: '未授权：需要用户管理权限' }, 401);
+        const permDefs = {};
+        ALL_PERM_KEYS.forEach(k => {
+            permDefs[k] = { label: PERMISSIONS[k].label, desc: PERMISSIONS[k].desc };
+        });
+        return jsonResponse({ permissions: permDefs, keys: ALL_PERM_KEYS });
     }
 
     // ---- GET /api/health (public) ----
