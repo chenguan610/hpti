@@ -632,9 +632,31 @@
                     总测试次数: <b style="color:#f9d390;">${rCount}</b> 次<br>
                     今日测试: <b style="color:#f9d390;">${stats.todayCount || 0}</b> 次<br>
                     平均匹配度: <b style="color:#f9d390;">${stats.avgMatch || 0}%</b><br>
+                    平均测试时长: <b style="color:#f9d390;">${stats.avgDuration ? (stats.avgDuration >= 60 ? Math.floor(stats.avgDuration/60) + '分' + (stats.avgDuration%60) + '秒' : stats.avgDuration + '秒') : '-'}</b><br>
                     最热门人格: <b style="color:#f9d390;">${stats.topPersonality ? stats.topPersonality.name : '-'}</b>${stats.topPersonality ? ' （出现 ' + stats.topPersonality.count + ' 次）' : ''}
                 </div>
             </div>
+            ${stats.dimTendency ? `
+            <div class="card">
+                <div class="card-title">📊 维度倾向分布</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;">
+                    ${Object.entries(stats.dimTendency).map(([dim, val]) => {
+                        const total = val.first + val.second || 1;
+                        const firstPct = Math.round(val.first / total * 100);
+                        return `
+                        <div style="background:rgba(60,45,75,0.5);border-radius:12px;padding:12px;text-align:center;">
+                            <div style="font-size:12px;color:#9b8eaa;margin-bottom:6px;">${dimLabels[dim].short}</div>
+                            <div style="display:flex;align-items:center;gap:4px;justify-content:center;">
+                                <span style="color:#f9d390;font-weight:700;">${dimLabels[dim].first}</span>
+                                <span style="color:#7ec8a0;font-weight:700;font-size:16px;">${firstPct}%</span>
+                                <span style="color:#9b8eaa;">:</span>
+                                <span style="color:#c75c5c;font-weight:700;font-size:16px;">${100-firstPct}%</span>
+                                <span style="color:#9b8eaa;font-weight:700;">${dimLabels[dim].second}</span>
+                            </div>
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>` : ''}
             <div class="card">
                 <div class="card-title">📈 近7天测试趋势</div>
                 <div class="dim-stats">${trendHTML}</div>
@@ -947,6 +969,8 @@
     }
 
     // ==================== Records ====================
+    let recordFilter = { code: '', rarity: 'all', date: '' };
+
     async function renderRecords() {
         document.getElementById('tab-records').innerHTML = '<div class="card"><div class="empty-state"><span class="emoji">⏳</span>加载中...</div></div>';
         let results = [];
@@ -957,40 +981,207 @@
             document.getElementById('tab-records').innerHTML = '<div class="card"><div class="empty-state"><span class="emoji">⚠️</span>加载失败，请检查网络连接</div></div>';
             return;
         }
+
+        // 应用筛选
+        let filtered = results;
+        if (recordFilter.code) {
+            filtered = filtered.filter(r => (r.personalityCode || '').includes(recordFilter.code.toUpperCase()) || (r.userCode || '').includes(recordFilter.code.toUpperCase()));
+        }
+        if (recordFilter.rarity !== 'all') {
+            filtered = filtered.filter(r => (r.rarity || 'common') === recordFilter.rarity);
+        }
+        if (recordFilter.date) {
+            filtered = filtered.filter(r => r.timestamp && r.timestamp.startsWith(recordFilter.date));
+        }
+
         document.getElementById('tab-records').innerHTML = `
             <div class="card">
                 <div class="card-title">
-                    <span>📋 测试记录（共 ${results.length} 条）</span>
+                    <span>📋 测试记录（共 ${results.length} 条${filtered.length !== results.length ? '，筛选后 ' + filtered.length + ' 条' : ''}）</span>
                     ${results.length > 0 ? `<button class="btn btn-danger btn-sm" onclick="clearRecords()">清空记录</button>` : ''}
                 </div>
-                ${results.length === 0 ? `
+                <div class="filter-bar" style="margin-bottom:16px;">
+                    <input type="text" placeholder="筛选代号（如 OES）..." value="${recordFilter.code}"
+                        oninput="recordFilter.code=this.value;renderRecords()" style="width:160px;">
+                    <select onchange="recordFilter.rarity=this.value;renderRecords()">
+                        <option value="all" ${recordFilter.rarity==='all'?'selected':''}>全部稀有度</option>
+                        <option value="common" ${recordFilter.rarity==='common'?'selected':''}>常见</option>
+                        <option value="rare" ${recordFilter.rarity==='rare'?'selected':''}>稀有</option>
+                        <option value="epic" ${recordFilter.rarity==='epic'?'selected':''}>史诗</option>
+                        <option value="legendary" ${recordFilter.rarity==='legendary'?'selected':''}>传说</option>
+                    </select>
+                    <input type="date" value="${recordFilter.date}" onchange="recordFilter.date=this.value;renderRecords()">
+                    ${(recordFilter.code || recordFilter.rarity !== 'all' || recordFilter.date) ? `<button class="btn btn-outline btn-sm" onclick="recordFilter={code:'',rarity:'all',date:''};renderRecords()">清除筛选</button>` : ''}
+                </div>
+                ${filtered.length === 0 ? `
                     <div class="empty-state">
                         <span class="emoji">📭</span>
-                        暂无测试记录
+                        ${results.length === 0 ? '暂无测试记录' : '没有匹配筛选条件的记录'}
                     </div>
                 ` : `
                     <div class="table-wrap">
                         <table class="data-table">
                             <thead>
-                                <tr><th>Emoji</th><th>代号</th><th>名称</th><th>匹配度</th><th>稀有度</th><th>时间</th></tr>
+                                <tr>
+                                    <th>Emoji</th>
+                                    <th>用户代号</th>
+                                    <th>人格代号</th>
+                                    <th>名称</th>
+                                    <th>匹配度</th>
+                                    <th>稀有度</th>
+                                    <th>耗时</th>
+                                    <th>时间</th>
+                                    <th>操作</th>
+                                </tr>
                             </thead>
                             <tbody>
-                                ${results.map(r => `
+                                ${filtered.map(r => {
+                                    const rIdx = results.indexOf(r);
+                                    const duration = r.duration ? (r.duration >= 60 ? Math.floor(r.duration/60) + '分' + (r.duration%60) + '秒' : r.duration + '秒') : '-';
+                                    return `
                                     <tr>
                                         <td style="font-size:20px;">${r.personalityEmoji||'🎭'}</td>
+                                        <td style="font-family:monospace;color:#bcacc4;font-size:12px;">${r.userCode||'-'}</td>
                                         <td class="code-cell">${r.personalityCode}</td>
                                         <td class="name-cell">${r.personalityName}</td>
                                         <td><span style="color:#7ec8a0;font-weight:700;">${r.matchPercent}%</span></td>
                                         <td><span class="badge badge-${r.rarity||'common'}">${rarityNames[r.rarity]||'-'}</span></td>
+                                        <td style="color:#9b8eaa;font-size:12px;">${duration}</td>
                                         <td style="color:#6e5c78;font-size:12px;">${new Date(r.timestamp).toLocaleString('zh-CN')}</td>
-                                    </tr>
-                                `).join('')}
+                                        <td><button class="btn btn-outline btn-sm" onclick="viewRecordDetail(${rIdx})">详情</button></td>
+                                    </tr>`;
+                                }).join('')}
                             </tbody>
                         </table>
                     </div>
                 `}
             </div>
         `;
+    }
+
+    function viewRecordDetail(idx) {
+        fetch(API_BASE + '/api/results', { headers: { 'X-Admin-Password': adminPwd } })
+            .then(r => r.json())
+            .then(json => {
+                const results = json.results || [];
+                const r = results[idx];
+                if (!r) { showToast('记录不存在', true); return; }
+
+                const duration = r.duration ? (r.duration >= 60 ? Math.floor(r.duration/60) + '分' + (r.duration%60) + '秒' : r.duration + '秒') : '-';
+                const time = new Date(r.timestamp).toLocaleString('zh-CN');
+                const dimKeysLocal = ['sex','social','emotion','action','think','adventure'];
+                const dimLabelsLocal = {
+                    sex:{first:"性开放",second:"性压抑",short:"性开放/性压抑"},
+                    social:{first:"外向",second:"内向",short:"外向/内向"},
+                    emotion:{first:"情绪稳定",second:"敏感多虑",short:"情绪稳定/敏感多虑"},
+                    action:{first:"行动派",second:"拖延症",short:"行动派/拖延症"},
+                    think:{first:"理性",second:"感性",short:"理性/感性"},
+                    adventure:{first:"冒险",second:"谨慎",short:"冒险/谨慎"}
+                };
+
+                // 答题详情
+                let answersHTML = '';
+                if (r.answers && r.answers.length > 0) {
+                    answersHTML = r.answers.map(a => `
+                        <div style="background:rgba(60,45,75,0.5);border-radius:10px;padding:12px;margin-bottom:8px;">
+                            <div style="display:flex;gap:8px;align-items:flex-start;">
+                                <span style="background:rgba(219,160,90,0.2);color:#f9d390;font-weight:700;font-size:12px;padding:2px 8px;border-radius:8px;flex-shrink:0;">Q${a.questionIndex}</span>
+                                <span class="badge badge-dim-${a.dimension}" style="flex-shrink:0;">${dimLabelsLocal[a.dimension]?.short || a.dimension}</span>
+                                <div style="flex:1;min-width:0;">
+                                    <div style="font-size:13px;color:#ddd;margin-bottom:4px;">${a.questionText}</div>
+                                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px;">
+                                        <span style="background:rgba(219,160,90,0.3);color:#f9d390;font-weight:700;padding:2px 10px;border-radius:10px;">选 ${a.selectedAnswer}</span>
+                                        <span style="color:#bcacc4;">${a.selectedOption}</span>
+                                        <span style="color:#6e5c78;">得分: ${a.score > 0 ? '+' : ''}${a.score}</span>
+                                        <span style="color:#6e5c78;">${a.intensity}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    answersHTML = '<div style="color:#6e5c78;font-size:13px;padding:12px;">该记录无详细答题数据（旧版本记录）</div>';
+                }
+
+                // 维度得分
+                let scoresHTML = '';
+                if (r.scores) {
+                    scoresHTML = dimKeysLocal.map(dim => {
+                        const score = r.scores[dim] || 0;
+                        const detail = r.dimDetails && r.dimDetails[dim] ? r.dimDetails[dim] : null;
+                        const letter = detail ? detail.letter : (score > 0 ? '?' : '?');
+                        const hit = detail ? detail.hit : false;
+                        const label = dimLabelsLocal[dim];
+                        return `
+                            <div style="text-align:center;">
+                                <div style="font-size:11px;color:#9b8eaa;margin-bottom:4px;">${label.short}</div>
+                                <div style="font-size:20px;font-weight:800;color:${hit ? '#f9d390' : '#6e5c78'};">${letter}</div>
+                                <div style="font-size:12px;color:${score > 0 ? '#7ec8a0' : '#c75c5c'};">${score > 0 ? '+' : ''}${score}</div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+
+                // 设备信息
+                let deviceHTML = '';
+                if (r.deviceInfo) {
+                    const di = r.deviceInfo;
+                    deviceHTML = `
+                        <div style="background:rgba(60,45,75,0.5);border-radius:10px;padding:12px;font-size:12px;color:#9b8eaa;line-height:1.8;">
+                            <div><b style="color:#bcacc4;">UA:</b> ${di.userAgent || '-'}</div>
+                            <div><b style="color:#bcacc4;">平台:</b> ${di.platform || '-'} | <b style="color:#bcacc4;">语言:</b> ${di.language || '-'}</div>
+                            <div><b style="color:#bcacc4;">屏幕:</b> ${di.screen || '-'} | <b style="color:#bcacc4;">视口:</b> ${di.viewport || '-'}</div>
+                            <div><b style="color:#bcacc4;">来源:</b> ${di.referrer || '直接访问'}</div>
+                        </div>
+                    `;
+                }
+
+                openModal('📊 测试记录详情', `
+                    <div style="text-align:center;margin-bottom:20px;">
+                        <div style="font-size:48px;">${r.personalityEmoji||'🎭'}</div>
+                        <div style="font-size:28px;font-weight:800;color:#f9d390;letter-spacing:4px;font-family:monospace;">${r.personalityCode}</div>
+                        <div style="font-size:16px;color:#f1e5ff;font-weight:600;">${r.personalityName}</div>
+                        <div style="margin-top:8px;">
+                            <span class="badge badge-${r.rarity||'common'}">${rarityNames[r.rarity]||'-'}</span>
+                            <span style="margin-left:8px;color:#7ec8a0;font-weight:700;">匹配度 ${r.matchPercent}%</span>
+                        </div>
+                    </div>
+
+                    <div style="background:rgba(60,45,75,0.5);border-radius:12px;padding:14px;margin-bottom:16px;">
+                        <div style="display:flex;justify-content:space-around;flex-wrap:wrap;gap:10px;font-size:13px;">
+                            <div><span style="color:#9b8eaa;">用户代号:</span> <b style="color:#f9d390;font-family:monospace;">${r.userCode||'-'}</b></div>
+                            <div><span style="color:#9b8eaa;">维度偏差:</span> <b style="color:#f9d390;">${r.bestDist !== null ? r.bestDist : '-'}</b></div>
+                            <div><span style="color:#9b8eaa;">耗时:</span> <b style="color:#f9d390;">${duration}</b></div>
+                            <div><span style="color:#9b8eaa;">题数:</span> <b style="color:#f9d390;">${r.questionCount || '-'}</b></div>
+                            <div><span style="color:#9b8eaa;">时间:</span> <b style="color:#f9d390;">${time}</b></div>
+                        </div>
+                    </div>
+
+                    ${scoresHTML ? `
+                    <div style="margin-bottom:16px;">
+                        <div style="font-size:14px;font-weight:700;color:#f1e5ff;margin-bottom:10px;">📐 六维度得分</div>
+                        <div style="display:flex;justify-content:space-around;flex-wrap:wrap;gap:10px;background:rgba(60,45,75,0.3);border-radius:12px;padding:14px;">
+                            ${scoresHTML}
+                        </div>
+                    </div>` : ''}
+
+                    <div style="margin-bottom:16px;">
+                        <div style="font-size:14px;font-weight:700;color:#f1e5ff;margin-bottom:10px;">📝 答题详情（${r.answers ? r.answers.length : 0}题）</div>
+                        ${answersHTML}
+                    </div>
+
+                    ${deviceHTML ? `
+                    <div style="margin-bottom:16px;">
+                        <div style="font-size:14px;font-weight:700;color:#f1e5ff;margin-bottom:10px;">📱 设备信息</div>
+                        ${deviceHTML}
+                    </div>` : ''}
+
+                    <div class="form-actions">
+                        <button class="btn btn-outline" onclick="closeModal()">关闭</button>
+                    </div>
+                `);
+            })
+            .catch(e => { showToast('加载详情失败', true); });
     }
 
     async function clearRecords() {
