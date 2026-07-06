@@ -59,7 +59,15 @@ async function readBody(request) {
 
 function checkAuth(request, data) {
     const pwd = request.headers.get('x-admin-password');
-    return pwd && pwd === data.password;
+    if (!pwd) return false;
+    // Check admin password
+    if (pwd === data.password) return true;
+    // Check user accounts
+    if (data.users && data.users.length > 0) {
+        const username = request.headers.get('x-username') || '';
+        return data.users.some(u => u.username === username && u.password === pwd);
+    }
+    return false;
 }
 
 // ==================== API Handlers ====================

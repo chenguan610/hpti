@@ -282,8 +282,9 @@
             <span class="emoji">🔐</span>
             <h1>HPTI 后台管理</h1>
             <div class="sub">请输入管理密码</div>
-            <input type="password" id="pwdInput" placeholder="密码（默认 admin）" onkeydown="if(event.key==='Enter')doLogin()">
-            <button class="btn btn-primary" onclick="doLogin()">进入后台</button>
+            <input type="text" id="userInput" placeholder="用户名（管理员可留空）" style="margin-bottom:10px;" onkeydown="if(event.key==='Enter'){document.getElementById('pwdInput').focus();}">
+            <input type="password" id="pwdInput" placeholder="密码" onkeydown="if(event.key==='Enter')doLogin()">
+            <button class="btn btn-primary" onclick="doLogin()">登录</button>
             <div style="margin-top:16px;font-size:12px;color:#6e5c78;">默认密码: admin · 数据存储在服务器端</div>
         </div>
     </div>
@@ -340,16 +341,23 @@
     // ==================== 后端 API ====================
     const API_BASE = ''; // 同源部署留空
     let adminPwd = ''; // 保存在内存中
+    let currentUser = ''; // 当前登录用户名（普通用户登录时设置）
+
+    function authHeaders() {
+        const h = { 'X-Admin-Password': adminPwd };
+        if (currentUser) h['X-Username'] = currentUser;
+        return h;
+    }
 
     async function apiGet(path) {
-        const resp = await fetch(API_BASE + path, { headers: { 'X-Admin-Password': adminPwd } });
+        const resp = await fetch(API_BASE + path, { headers: authHeaders() });
         if (resp.status === 401) throw new Error('未授权');
         return resp.json();
     }
     async function apiPost(path, body) {
         const resp = await fetch(API_BASE + path, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Admin-Password': adminPwd },
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
             body: JSON.stringify(body)
         });
         if (resp.status === 401) throw new Error('未授权');
@@ -358,7 +366,7 @@
     async function apiPut(path, body) {
         const resp = await fetch(API_BASE + path, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'X-Admin-Password': adminPwd },
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
             body: JSON.stringify(body)
         });
         if (resp.status === 401) throw new Error('未授权');
@@ -367,7 +375,7 @@
     async function apiDelete(path, body) {
         const opts = {
             method: 'DELETE',
-            headers: { 'X-Admin-Password': adminPwd }
+            headers: authHeaders()
         };
         if (body) {
             opts.headers['Content-Type'] = 'application/json';
@@ -530,19 +538,22 @@
 
     // ==================== Login ====================
     async function doLogin() {
+        const user = document.getElementById('userInput').value.trim();
         const pwd = document.getElementById('pwdInput').value;
         if (!pwd) { showToast('请输入密码', true); return; }
         try {
-            const json = await apiPost('/api/login', { password: pwd });
+            const body = user ? { username: user, password: pwd } : { password: pwd };
+            const json = await apiPost('/api/login', body);
             if (json.success) {
                 adminPwd = pwd;
+                currentUser = json.role === 'user' ? (json.username || user) : '';
                 document.getElementById('loginWrap').style.display = 'none';
                 document.getElementById('adminMain').style.display = 'block';
                 appData = await loadData();
                 switchTab('dashboard');
-                showToast('欢迎回来');
+                showToast(currentUser ? `欢迎，${currentUser}` : '登录成功');
             } else {
-                showToast('密码错误', true);
+                showToast(json.error || '密码错误', true);
             }
         } catch(e) {
             showToast('无法连接服务器', true);
@@ -551,9 +562,11 @@
 
     function doLogout() {
         adminPwd = '';
+        userPwd = '';
         document.getElementById('loginWrap').style.display = 'flex';
         document.getElementById('adminMain').style.display = 'none';
         document.getElementById('pwdInput').value = '';
+        document.getElementById('userInput').value = '';
         appData = null;
     }
 
